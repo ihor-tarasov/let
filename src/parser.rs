@@ -46,8 +46,8 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
     fn precedence(&self) -> u8 {
         let buf = self.lexer.buffer();
         match buf.len() {
-            1 => get_precedence((buf[0], b'\0', b'\0')),
-            2 => get_precedence((buf[0], buf[1], b'\0')),
+            1 => get_precedence((buf[0], b' ', b' ')),
+            2 => get_precedence((buf[0], buf[1], b' ')),
             3 => get_precedence((buf[0], buf[1], buf[2])),
             _ => 0,
         }
@@ -142,10 +142,10 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
             let buf = self.lexer.buffer();
             let operator = match buf.len() {
-                1 => [buf[0], b'\0', b'\0'],
-                2 => [buf[0], buf[1], b'\0'],
+                1 => [buf[0], b' ', b' '],
+                2 => [buf[0], buf[1], b' '],
                 3 => [buf[0], buf[1], buf[2]],
-                _ => [b'\0', b'\0', b'\0'],
+                _ => [b' ', b' ', b' '],
             };
 
             self.next(); // Skip operator.
@@ -213,7 +213,8 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             return raise("Expected function name.".to_string());
         }
 
-        self.compiler.start_function(self.lexer.buffer())?;
+        self.compiler.start_function()?;
+        self.compiler.lable_named(self.lexer.buffer())?;
         self.next();
 
         if !self.token_is_buf(Token::Operator, &[b'(']) {
@@ -263,14 +264,10 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
     }
 
     fn global_code(&mut self) -> ParserResult {
-        self.compiler.start_function(b"@ctor")?;
+        self.compiler.start_function()?;
+        self.compiler.lable_named(b"__ctor__")?;
         self.expression()?;
         self.compiler.end_function()
-    }
-
-    fn extern_symbol(&mut self) -> ParserResult {
-        self.next(); // Skip "extern"
-        self.prototype()
     }
 
     pub fn parse(&mut self) -> ParserResult {
@@ -279,7 +276,6 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             match (self.token, self.lexer.buffer()) {
                 (None, _) => break,
                 (Some(Token::Identifier), b"fn") => self.function()?,
-                (Some(Token::Identifier), b"extern") => self.extern_symbol()?,
                 _ => self.global_code()?,
             }
         }

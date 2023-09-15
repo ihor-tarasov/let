@@ -4,6 +4,7 @@ pub enum Error {
     ParseInt(std::num::ParseIntError),
     ParseFloat(std::num::ParseFloatError),
     Custom(Box<String>),
+    IO(std::io::Error),
 }
 
 impl From<std::str::Utf8Error> for Error {
@@ -21,6 +22,12 @@ impl From<std::num::ParseIntError> for Error {
 impl From<std::num::ParseFloatError> for Error {
     fn from(value: std::num::ParseFloatError) -> Self {
         Self::ParseFloat(value)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::IO(value)
     }
 }
 
