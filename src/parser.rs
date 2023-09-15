@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use crate::{
     compiler::Compiler,
@@ -15,7 +15,9 @@ pub struct Parser<I: Iterator, C> {
     token: Option<Token>,
     range: Range<usize>,
     compiler: C,
-    id: usize,
+    lable_id: usize,
+    local_id: usize,
+    locals: Vec<HashMap<Box<[u8]>, usize>>, // TODO: Optimize
 }
 
 impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
@@ -25,13 +27,21 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             token: None,
             range: 0..0,
             compiler,
-            id: 0,
+            lable_id: 0,
+            local_id: 0,
+            locals: Vec::new(),
         }
     }
 
-    fn get_id(&mut self) -> usize {
-        let result = self.id;
-        self.id += 1;
+    fn get_lable_id(&mut self) -> usize {
+        let result = self.lable_id;
+        self.lable_id += 1;
+        result
+    }
+
+    fn get_local_id(&mut self) -> usize {
+        let result = self.local_id;
+        self.local_id += 1;
         result
     }
 
@@ -95,8 +105,21 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         Ok(())
     }
 
+    fn find_variable(&self, name: &[u8]) -> Option<usize> {
+        for block in self.locals.iter().rev() {
+            if let Some(i) = block.get(name).cloned() {
+                return Some(i);
+            }
+        }
+        None
+    }
+
     fn identifier(&mut self) -> ParserResult {
-        self.compiler.variable(self.lexer.buffer())?;
+        if let Some(index) = self.find_variable(self.lexer.buffer()) {
+            self.compiler.load(index as u64)?;
+        } else {
+            self.compiler.pointer(self.lexer.buffer())?;
+        }
         self.next(); // Skip identifier.
 
         if !self.token_is_buf(Token::Operator, &[b'(']) {
@@ -108,6 +131,10 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
         let mut arguments = 0;
         loop {
+            if arguments >= u8::MAX as usize {
+                return raise("Reached maximum function argumens number".to_string())
+            }
+
             self.expression()?;
             arguments += 1;
 
@@ -118,7 +145,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
         self.next(); // Skip ')'.
 
-        self.compiler.call(arguments)
+        self.compiler.call(arguments as u8)
     }
 
     fn primary(&mut self) -> ParserResult {
@@ -166,41 +193,75 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         self.binary(1)
     }
 
+    fn enter_block(&mut self) {
+        self.locals.push(HashMap::new());
+    }
+
+    fn exit_block(&mut self) {
+        let block_size = self.locals.last().unwrap().len();
+        self.local_id -= block_size;
+        self.locals.pop().unwrap();
+    }
+
+    fn add_local(&mut self) -> ParserResult {
+        let index = self.get_local_id();
+        if self
+            .locals
+            .last_mut()
+            .unwrap()
+            .insert(Vec::from(self.lexer.buffer()).into_boxed_slice(), index)
+            .is_some()
+        {
+            return raise(format!("Variable \"{:?}\" already exists.", self.lexer.buffer()));
+        }
+        Ok(())
+    }
+
     fn p_if(&mut self) -> ParserResult {
         self.next(); // Skip "if"
 
-        let end_if_id = self.get_id();
+        let end_if_id = self.get_lable_id();
 
         // Condition
         self.expression()?;
-        let mut next_id = self.get_id();
-        self.compiler.jump_false(next_id)?;
+        let mut next_id = self.get_lable_id();
+        self.compiler.jump_false(next_id as u64)?;
+
+        // Block.
+        self.enter_block();
         self.expression()?;
+        self.exit_block();
 
         loop {
             if self.token_is_buf(Token::Identifier, b"end") {
                 self.next(); // Skip "end"
-                self.compiler.lable(next_id)?;
-                self.compiler.lable(end_if_id)?;
+                self.compiler.lable(next_id as u64)?;
+                self.compiler.lable(end_if_id as u64)?;
                 break;
             } else if self.token_is_buf(Token::Identifier, b"elif") {
                 self.next(); // Skip "elif"
-                self.compiler.jump(end_if_id)?;
-                self.compiler.lable(next_id)?;
+                self.compiler.jump(end_if_id as u64)?;
+                self.compiler.lable(next_id as u64)?;
+                self.expression()?; // Condition.
+                next_id = self.get_lable_id();
+                self.compiler.jump_false(next_id as u64)?;
+                // Block.
+                self.enter_block();
                 self.expression()?;
-                next_id = self.get_id();
-                self.compiler.jump_false(next_id)?;
-                self.expression()?;
+                self.exit_block();
             } else if self.token_is_buf(Token::Identifier, b"else") {
                 self.next(); // Skip "else"
-                self.compiler.jump(end_if_id)?;
-                self.compiler.lable(next_id)?;
+                self.compiler.jump(end_if_id as u64)?;
+                self.compiler.lable(next_id as u64)?;
+                // Block.
+                self.enter_block();
                 self.expression()?;
+                self.exit_block();
                 if !self.token_is_buf(Token::Identifier, b"end") {
                     return raise("Expected \"end\".".to_string());
                 }
                 self.next(); // Skip "end"
-                self.compiler.lable(end_if_id)?;
+                self.compiler.lable(end_if_id as u64)?;
                 break;
             }
         }
@@ -213,7 +274,6 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             return raise("Expected function name.".to_string());
         }
 
-        self.compiler.start_function()?;
         self.compiler.lable_named(self.lexer.buffer())?;
         self.next();
 
@@ -223,7 +283,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         self.next();
 
         while self.token_is(Token::Identifier) {
-            self.compiler.argument(self.lexer.buffer())?;
+            self.add_local()?;
             self.next();
         }
 
@@ -239,6 +299,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
     fn function(&mut self) -> ParserResult {
         self.next(); // Skip "fn"
 
+        self.enter_block();
         self.prototype()?;
 
         let mut first = true;
@@ -258,16 +319,16 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
         self.next();
 
-        self.compiler.end_function()?;
+        self.compiler.ret()?;
+        self.exit_block();
 
         Ok(())
     }
 
     fn global_code(&mut self) -> ParserResult {
-        self.compiler.start_function()?;
         self.compiler.lable_named(b"__ctor__")?;
         self.expression()?;
-        self.compiler.end_function()
+        self.compiler.ret()
     }
 
     pub fn parse(&mut self) -> ParserResult {

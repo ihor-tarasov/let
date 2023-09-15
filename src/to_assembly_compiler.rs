@@ -34,12 +34,7 @@ impl<W: std::io::Write> Compiler for ToAssemblerCompiler<W> {
         Ok(())
     }
 
-    fn variable(&mut self, name: &[u8]) -> CompilerResult {
-        writeln!(self.0, "\tLD {}", Slice(name))?;
-        Ok(())
-    }
-
-    fn call(&mut self, arguments: u64) -> CompilerResult {
+    fn call(&mut self, arguments: u8) -> CompilerResult {
         writeln!(self.0, "\tCALL {arguments}")?;
         Ok(())
     }
@@ -49,27 +44,12 @@ impl<W: std::io::Write> Compiler for ToAssemblerCompiler<W> {
         Ok(())
     }
 
-    fn start_function(&mut self) -> CompilerResult {
-        writeln!(self.0, "#FN")?;
-        Ok(())
-    }
-
-    fn argument(&mut self, name: &[u8]) -> CompilerResult {
-        writeln!(self.0, "#ARG {}", Slice(name))?;
-        Ok(())
-    }
-
-    fn end_function(&mut self) -> CompilerResult {
-        writeln!(self.0, "\tRET")?;
-        Ok(())
-    }
-
     fn end_of_statement(&mut self) -> CompilerResult {
         writeln!(self.0, "\tDROP")?;
         Ok(())
     }
 
-    fn lable(&mut self, id: usize) -> CompilerResult {
+    fn lable(&mut self, id: u64) -> CompilerResult {
         writeln!(self.0, "@lbl_{id}:")?;
         Ok(())
     }
@@ -79,7 +59,7 @@ impl<W: std::io::Write> Compiler for ToAssemblerCompiler<W> {
         Ok(())
     }
 
-    fn jump(&mut self, id: usize) -> CompilerResult {
+    fn jump(&mut self, id: u64) -> CompilerResult {
         writeln!(self.0, "\tJP @lbl_{id}")?;
         Ok(())
     }
@@ -89,13 +69,28 @@ impl<W: std::io::Write> Compiler for ToAssemblerCompiler<W> {
         Ok(())
     }
 
-    fn jump_false(&mut self, id: usize) -> CompilerResult {
+    fn jump_false(&mut self, id: u64) -> CompilerResult {
         writeln!(self.0, "\tJPF @lbl_{id}")?;
         Ok(())
     }
 
     fn jump_false_name(&mut self, name: &[u8]) -> CompilerResult {
         writeln!(self.0, "\tJPF {}", Slice(name))?;
+        Ok(())
+    }
+
+    fn load(&mut self, index: u64) -> CompilerResult {
+        writeln!(self.0, "\tLD {}", index)?;
+        Ok(())
+    }
+
+    fn pointer(&mut self, name: &[u8]) -> CompilerResult {
+        writeln!(self.0, "\tPTR {}", Slice(name))?;
+        Ok(())
+    }
+
+    fn ret(&mut self) -> CompilerResult {
+        writeln!(self.0, "\tRET")?;
         Ok(())
     }
 }

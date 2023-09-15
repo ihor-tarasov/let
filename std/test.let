@@ -1,6 +1,10 @@
 
-fn add(a b)
-    a + b
+fn factorial(n)
+    if n <= 1
+        1
+    else
+        n * factorial(n - 1)
+    end
 end
 
-print(add(2 4))
+print(factorial(6))

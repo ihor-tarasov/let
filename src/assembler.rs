@@ -23,16 +23,18 @@ where
         while let Some(index) = line.find(':') {
             self.compiler.lable_named(line[0..index].trim().as_bytes())?;
             line = &line[(index + 1)..];
+
+            if line.is_empty() {
+                return Ok(())
+            }
         }
 
-        if line == "#FN" {
-            self.compiler.start_function()
-        } else if line.starts_with("#ARG ") {
-            line = line[5..].trim();
-            self.compiler.argument(line.as_bytes())
-        } else if line.starts_with("LD ") {
+        if line.starts_with("LD ") {
             line = line[3..].trim();
-            self.compiler.variable(line.as_bytes())
+            self.compiler.load(line.parse::<u64>()?)
+        } else if line.starts_with("PTR ") {
+            line = line[3..].trim();
+            self.compiler.pointer(line.as_bytes())
         } else if line.starts_with("INT ") {
             line = line[4..].trim();
             self.compiler.integer(line.parse::<u64>()?)
@@ -54,10 +56,10 @@ where
             line = line[3..].trim();
             self.compiler.jump_name(line.as_bytes())
         } else if line == "RET" {
-            self.compiler.end_function()
+            self.compiler.ret()
         } else if line.starts_with("CALL ") {
             line = line[5..].trim();
-            self.compiler.call(line.parse::<u64>()?)
+            self.compiler.call(line.parse::<u8>()?)
         } else {
             raise(format!("Unexpected line \"{}\"", line))
         }
@@ -72,6 +74,7 @@ where
     let mut assembler = Assembler::new(compiler);
     let mut line = String::new();
     loop {
+        line.clear();
         if read.read_line(&mut line)? == 0 {
             break Ok(());
         }
