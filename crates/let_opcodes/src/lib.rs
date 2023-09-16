@@ -7,6 +7,7 @@ macro_rules! impl_opcodes {
 impl_opcodes!(
     // 1 byte opcodes
     RET: 0x00
+    DROP: 0x01
 
     // Operators opcodes is in range 0x10..=0x1F
     LS: 0x10

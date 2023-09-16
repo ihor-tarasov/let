@@ -51,6 +51,8 @@ where
             self.emiter.jump_name(line.as_bytes())
         } else if line == "RET" {
             self.emiter.ret()
+        } else if line == "DROP" {
+            self.emiter.drop()
         } else if line.starts_with("CALL ") {
             line = line[5..].trim();
             self.emiter.call(line.parse::<u8>()?)
