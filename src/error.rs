@@ -31,6 +31,9 @@ impl From<std::io::Error> for Error {
     }
 }
 
-pub fn raise<T>(message: String) -> Result<T, Error> {
-    Err(Error::Custom(Box::new(message)))
+#[macro_export]
+macro_rules! raise {
+    ($($arg:tt)*) => {
+        Err($crate::Error::Custom(Box::new(format!($($arg)*))))
+    };
 }

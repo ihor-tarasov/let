@@ -1,73 +1,89 @@
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter},
-};
+fn parse<R, W>(read: R, write: W) -> letx::ParserResult
+where
+    R: std::io::Read,
+    W: std::io::Write,
+{
+    let mut parser = letx::Parser::new(
+        letx::ReadIter::new(read, 1024),
+        letx::AssemblyEmiter::from(std::io::BufWriter::new(write)),
+    );
 
-use letx::assembler::assemble;
+    parser.parse()
+}
+
+fn create_file_and_parse<R>(read: R, path: &str) -> letx::ParserResult
+where
+    R: std::io::Read,
+{
+    let mut dest_path = path[..(path.len() - 4)].to_string();
+    dest_path.push_str(".asm");
+    match std::fs::File::create(dest_path.as_str()) {
+        Ok(dest) => match parse(read, dest) {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                letx::raise!("Unable to compile file \"{path}\" error: {error:?}")
+            }
+        },
+        Err(error) => {
+            letx::raise!("Unable to create file \"{dest_path}\", error: {error:?}")
+        }
+    }
+}
+
+fn assemble<R, O>(read: R, object: O, metadata: O) -> letx::AssemblerResult
+where
+    R: std::io::Read,
+    O: std::io::Write,
+{
+    letx::assemble(
+        std::io::BufReader::new(read),
+        letx::ObjectEmiter::new(
+            std::io::BufWriter::new(object),
+            std::io::BufWriter::new(metadata),
+        ),
+    )
+}
+
+fn create_files_and_assemble<R>(read: R, path: &str) -> letx::AssemblerResult
+where
+    R: std::io::Read,
+{
+    let mut obj_path = path[..(path.len() - 4)].to_string();
+    let mut meta_path = obj_path.clone();
+    obj_path.push_str(".leto");
+    meta_path.push_str(".letm");
+    match std::fs::File::create(obj_path.as_str()) {
+        Ok(obj) => match std::fs::File::create(meta_path.as_str()) {
+            Ok(meta) => assemble(read, obj, meta),
+            Err(error) => {
+                letx::raise!("Unable to create file \"{meta_path}\", error: {error:?}")
+            }
+        },
+        Err(error) => {
+            letx::raise!("Unable to create file \"{obj_path}\", error: {error:?}")
+        }
+    }
+}
+
+fn run_file(path: &str) -> Result<(), letx::Error> {
+    match std::fs::File::open(path) {
+        Ok(file) => {
+            if path.ends_with(".let") {
+                create_file_and_parse(file, path)
+            } else if path.ends_with(".asm") {
+                create_files_and_assemble(file, path)
+            } else {
+                letx::raise!("Unknown file type: {path}")
+            }
+        }
+        Err(error) => letx::raise!("Unable to open file \"{path}\", error: {error:?}"),
+    }
+}
 
 fn main() {
-    std::env::args()
-        .skip(1)
-        .for_each(|path| match File::open(path.as_str()) {
-            Ok(file) => {
-                if path.ends_with(".let") {
-                    let mut dest_path = path[..(path.len() - 4)].to_string();
-                    dest_path.push_str(".asm");
-                    match File::create(dest_path.as_str()) {
-                        Ok(dest) => {
-                            let mut parser = letx::Parser::new(
-                                letx::ReadIter::new(file, 1024),
-                                letx::ToAssemblerCompiler::from(dest),
-                            );
-
-                            match parser.parse() {
-                                Ok(_) => (),
-                                Err(error) => {
-                                    eprintln!("Unable to compile file \"{path}\" error: {error:?}")
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            eprintln!("Unable to create file \"{dest_path}\", error: {error:?}");
-                        }
-                    };
-                } else if path.ends_with(".asm") {
-                    let mut obj_path = path[..(path.len() - 4)].to_string();
-                    let mut meta_path = obj_path.clone();
-                    obj_path.push_str(".obj");
-                    meta_path.push_str(".meta");
-                    match File::create(obj_path.as_str()) {
-                        Ok(obj) => {
-                            match File::create(meta_path.as_str()) {
-                                Ok(meta) => {
-                                    match assemble(
-                                        BufReader::new(file),
-                                        letx::ToObjectCompiler::new(
-                                            BufWriter::new(obj),
-                                            BufWriter::new(meta),
-                                        ),
-                                    ) {
-                                        Ok(_) => (),
-                                        Err(error) => {
-                                            eprintln!("Unable to assemble file \"{path}\" error: {error:?}")
-                                        },
-                                    }
-                                }
-                                Err(error) => {
-                                    eprintln!("Unable to create file \"{meta_path}\", error: {error:?}");
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            eprintln!("Unable to create file \"{obj_path}\", error: {error:?}");
-                        }
-                    };
-                } else {
-                    eprintln!("Unknown file type: {path}");
-                }
-            }
-            Err(error) => {
-                eprintln!("Unable to open file \"{path}\", error: {error:?}")
-            }
-        });
+    std::env::args().skip(1).for_each(|path| {
+        if let Err(error) = run_file(path.as_str()) {
+            eprintln!("{error:?}");
+        }
+    });
 }

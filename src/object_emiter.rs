@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    compiler::{Compiler, CompilerResult},
+    emiter::{Emiter, EmiterResult},
     opcodes,
 };
 
@@ -18,13 +18,13 @@ impl<'a> fmt::Display for Slice<'a> {
     }
 }
 
-pub struct ToObjectCompiler<O, M> {
+pub struct ObjectEmiter<O, M> {
     object_write: O,
     metadata_write: M,
     counter: u64,
 }
 
-impl<O, M> ToObjectCompiler<O, M> {
+impl<O, M> ObjectEmiter<O, M> {
     pub fn new(object: O, metadata: M) -> Self {
         Self {
             object_write: object,
@@ -34,12 +34,12 @@ impl<O, M> ToObjectCompiler<O, M> {
     }
 }
 
-impl<O, M> Compiler for ToObjectCompiler<O, M>
+impl<O, M> Emiter for ObjectEmiter<O, M>
 where
     O: std::io::Write,
     M: std::io::Write,
 {
-    fn integer(&mut self, value: u64) -> CompilerResult {
+    fn integer(&mut self, value: u64) -> EmiterResult {
         if value <= u8::MAX as u64 {
             self.object_write.write_all(&[opcodes::INT1, value as u8])?;
             self.counter += 2;
@@ -59,20 +59,20 @@ where
         Ok(())
     }
 
-    fn real(&mut self, value: f64) -> CompilerResult {
+    fn real(&mut self, value: f64) -> EmiterResult {
         self.object_write.write_all(&[opcodes::REAL])?;
         self.object_write.write_all(&value.to_be_bytes())?;
         self.counter += 9;
         Ok(())
     }
 
-    fn call(&mut self, arguments: u8) -> crate::compiler::CompilerResult {
+    fn call(&mut self, arguments: u8) -> crate::emiter::EmiterResult {
         self.object_write.write_all(&[opcodes::CALL, arguments])?;
         self.counter += 2;
         Ok(())
     }
 
-    fn binary(&mut self, operator: [u8; 3]) -> crate::compiler::CompilerResult {
+    fn binary(&mut self, operator: [u8; 3]) -> crate::emiter::EmiterResult {
         let opcode = match &operator {
             b"+  " => opcodes::ADD,
             b"<  " => opcodes::LS,
@@ -88,21 +88,21 @@ where
         Ok(())
     }
 
-    fn end_of_statement(&mut self) -> crate::compiler::CompilerResult {
+    fn end_of_statement(&mut self) -> crate::emiter::EmiterResult {
         todo!()
     }
 
-    fn lable(&mut self, id: u64) -> crate::compiler::CompilerResult {
+    fn lable(&mut self, id: u64) -> crate::emiter::EmiterResult {
         writeln!(self.metadata_write, "lable @lbl_{id} {}", self.counter)?;
         Ok(())
     }
 
-    fn lable_named(&mut self, lable: &[u8]) -> crate::compiler::CompilerResult {
+    fn lable_named(&mut self, lable: &[u8]) -> crate::emiter::EmiterResult {
         writeln!(self.metadata_write, "lable {} {}", Slice(lable), self.counter)?;
         Ok(())
     }
 
-    fn jump(&mut self, id: u64) -> crate::compiler::CompilerResult {
+    fn jump(&mut self, id: u64) -> crate::emiter::EmiterResult {
         self.object_write
             .write_all(&[opcodes::JP, 0, 0, 0, 0, 0, 0, 0, 0])?;
         writeln!(self.metadata_write, "link @lbl_{id} {}", self.counter + 1)?;
@@ -110,7 +110,7 @@ where
         Ok(())
     }
 
-    fn jump_name(&mut self, name: &[u8]) -> crate::compiler::CompilerResult {
+    fn jump_name(&mut self, name: &[u8]) -> crate::emiter::EmiterResult {
         self.object_write
             .write_all(&[opcodes::JP, 0, 0, 0, 0, 0, 0, 0, 0])?;
         writeln!(
@@ -123,7 +123,7 @@ where
         Ok(())
     }
 
-    fn jump_false(&mut self, id: u64) -> crate::compiler::CompilerResult {
+    fn jump_false(&mut self, id: u64) -> crate::emiter::EmiterResult {
         self.object_write
             .write_all(&[opcodes::JPF, 0, 0, 0, 0, 0, 0, 0, 0])?;
         writeln!(self.metadata_write, "link @lbl_{id} {}", self.counter + 1)?;
@@ -131,7 +131,7 @@ where
         Ok(())
     }
 
-    fn jump_false_name(&mut self, name: &[u8]) -> crate::compiler::CompilerResult {
+    fn jump_false_name(&mut self, name: &[u8]) -> crate::emiter::EmiterResult {
         self.object_write
             .write_all(&[opcodes::JPF, 0, 0, 0, 0, 0, 0, 0, 0])?;
         writeln!(
@@ -144,7 +144,7 @@ where
         Ok(())
     }
 
-    fn load(&mut self, index: u64) -> CompilerResult {
+    fn load(&mut self, index: u64) -> EmiterResult {
         if index <= u8::MAX as u64 {
             self.object_write.write_all(&[opcodes::LD1, index as u8])?;
             self.counter += 2;
@@ -164,7 +164,7 @@ where
         Ok(())
     }
 
-    fn pointer(&mut self, name: &[u8]) -> CompilerResult {
+    fn pointer(&mut self, name: &[u8]) -> EmiterResult {
         self.object_write
             .write_all(&[opcodes::PTR, 0, 0, 0, 0, 0, 0, 0, 0])?;
         writeln!(
@@ -177,7 +177,7 @@ where
         Ok(())
     }
 
-    fn ret(&mut self) -> CompilerResult {
+    fn ret(&mut self) -> EmiterResult {
         self.object_write.write_all(&[opcodes::RET])?;
         Ok(())
     }

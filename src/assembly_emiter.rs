@@ -1,10 +1,10 @@
 use core::fmt;
 
-use crate::compiler::{Compiler, CompilerResult};
+use crate::emiter::{Emiter, EmiterResult};
 
-pub struct ToAssemblerCompiler<W>(W);
+pub struct AssemblyEmiter<W>(W);
 
-impl<W> From<W> for ToAssemblerCompiler<W> {
+impl<W> From<W> for AssemblyEmiter<W> {
     fn from(value: W) -> Self {
         Self(value)
     }
@@ -23,73 +23,73 @@ impl<'a> fmt::Display for Slice<'a> {
     }
 }
 
-impl<W: std::io::Write> Compiler for ToAssemblerCompiler<W> {
-    fn integer(&mut self, value: u64) -> CompilerResult {
+impl<W: std::io::Write> Emiter for AssemblyEmiter<W> {
+    fn integer(&mut self, value: u64) -> EmiterResult {
         writeln!(self.0, "\tINT {value}")?;
         Ok(())
     }
 
-    fn real(&mut self, value: f64) -> CompilerResult {
+    fn real(&mut self, value: f64) -> EmiterResult {
         writeln!(self.0, "\tREAL {value}")?;
         Ok(())
     }
 
-    fn call(&mut self, arguments: u8) -> CompilerResult {
+    fn call(&mut self, arguments: u8) -> EmiterResult {
         writeln!(self.0, "\tCALL {arguments}")?;
         Ok(())
     }
 
-    fn binary(&mut self, operator: [u8; 3]) -> CompilerResult {
+    fn binary(&mut self, operator: [u8; 3]) -> EmiterResult {
         writeln!(self.0, "\tOP {}", Slice(&operator))?;
         Ok(())
     }
 
-    fn end_of_statement(&mut self) -> CompilerResult {
+    fn end_of_statement(&mut self) -> EmiterResult {
         writeln!(self.0, "\tDROP")?;
         Ok(())
     }
 
-    fn lable(&mut self, id: u64) -> CompilerResult {
+    fn lable(&mut self, id: u64) -> EmiterResult {
         writeln!(self.0, "@lbl_{id}:")?;
         Ok(())
     }
 
-    fn lable_named(&mut self, lable: &[u8]) -> CompilerResult {
+    fn lable_named(&mut self, lable: &[u8]) -> EmiterResult {
         writeln!(self.0, "{}:", Slice(lable))?;
         Ok(())
     }
 
-    fn jump(&mut self, id: u64) -> CompilerResult {
+    fn jump(&mut self, id: u64) -> EmiterResult {
         writeln!(self.0, "\tJP @lbl_{id}")?;
         Ok(())
     }
 
-    fn jump_name(&mut self, name: &[u8]) -> CompilerResult {
+    fn jump_name(&mut self, name: &[u8]) -> EmiterResult {
         writeln!(self.0, "\tJP {}", Slice(name))?;
         Ok(())
     }
 
-    fn jump_false(&mut self, id: u64) -> CompilerResult {
+    fn jump_false(&mut self, id: u64) -> EmiterResult {
         writeln!(self.0, "\tJPF @lbl_{id}")?;
         Ok(())
     }
 
-    fn jump_false_name(&mut self, name: &[u8]) -> CompilerResult {
+    fn jump_false_name(&mut self, name: &[u8]) -> EmiterResult {
         writeln!(self.0, "\tJPF {}", Slice(name))?;
         Ok(())
     }
 
-    fn load(&mut self, index: u64) -> CompilerResult {
+    fn load(&mut self, index: u64) -> EmiterResult {
         writeln!(self.0, "\tLD {}", index)?;
         Ok(())
     }
 
-    fn pointer(&mut self, name: &[u8]) -> CompilerResult {
+    fn pointer(&mut self, name: &[u8]) -> EmiterResult {
         writeln!(self.0, "\tPTR {}", Slice(name))?;
         Ok(())
     }
 
-    fn ret(&mut self) -> CompilerResult {
+    fn ret(&mut self) -> EmiterResult {
         writeln!(self.0, "\tRET")?;
         Ok(())
     }

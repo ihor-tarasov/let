@@ -1,77 +1,75 @@
-use crate::{error::{Error, raise}, compiler::Compiler};
+use crate::{emiter::Emiter, error::Error, raise};
 
 pub type AssemblerResult = Result<(), Error>;
 
-struct Assembler<C> {
-    compiler: C,
+struct Assembler<E> {
+    emiter: E,
 }
 
-impl<C> Assembler<C>
+impl<E> Assembler<E>
 where
-    C: Compiler,
+    E: Emiter,
 {
-    pub fn new(compiler: C) -> Self {
-        Self {
-            compiler,
-        }
+    fn new(emiter: E) -> Self {
+        Self { emiter }
     }
 
-    pub fn assemble(&mut self, mut line: &str) -> AssemblerResult {
+    fn assemble(&mut self, mut line: &str) -> AssemblerResult {
         line = line.trim();
 
         // Handle lables
         while let Some(index) = line.find(':') {
-            self.compiler.lable_named(line[0..index].trim().as_bytes())?;
+            self.emiter.lable_named(line[0..index].trim().as_bytes())?;
             line = &line[(index + 1)..];
 
             if line.is_empty() {
-                return Ok(())
+                return Ok(());
             }
         }
 
         if line.starts_with("LD ") {
             line = line[3..].trim();
-            self.compiler.load(line.parse::<u64>()?)
+            self.emiter.load(line.parse::<u64>()?)
         } else if line.starts_with("PTR ") {
             line = line[3..].trim();
-            self.compiler.pointer(line.as_bytes())
+            self.emiter.pointer(line.as_bytes())
         } else if line.starts_with("INT ") {
             line = line[4..].trim();
-            self.compiler.integer(line.parse::<u64>()?)
+            self.emiter.integer(line.parse::<u64>()?)
         } else if line.starts_with("OP ") {
             line = line[3..].trim();
             if line.len() > 3 || line.is_empty() {
-                return raise("Wrong operator triplet".to_string())
+                return raise!("Wrong operator triplet");
             }
             let operator = [
                 line.as_bytes().get(0).cloned().unwrap_or(b' '),
                 line.as_bytes().get(1).cloned().unwrap_or(b' '),
                 line.as_bytes().get(2).cloned().unwrap_or(b' '),
             ];
-            self.compiler.binary(operator)
+            self.emiter.binary(operator)
         } else if line.starts_with("JPF ") {
             line = line[4..].trim();
-            self.compiler.jump_false_name(line.as_bytes())
+            self.emiter.jump_false_name(line.as_bytes())
         } else if line.starts_with("JP ") {
             line = line[3..].trim();
-            self.compiler.jump_name(line.as_bytes())
+            self.emiter.jump_name(line.as_bytes())
         } else if line == "RET" {
-            self.compiler.ret()
+            self.emiter.ret()
         } else if line.starts_with("CALL ") {
             line = line[5..].trim();
-            self.compiler.call(line.parse::<u8>()?)
+            self.emiter.call(line.parse::<u8>()?)
         } else {
-            raise(format!("Unexpected line \"{}\"", line))
+            raise!("UnexpeEted line \"{}\"", line)
         }
     }
 }
 
-pub fn assemble<R, C>(mut read: R, compiler: C) -> AssemblerResult
+pub fn assemble<R, E>(mut read: R, emiter: E) -> AssemblerResult
 where
     R: std::io::BufRead,
-    C: Compiler,
+    E: Emiter,
 {
-    let mut assembler = Assembler::new(compiler);
+    let mut assembler = Assembler::new(emiter);
     let mut line = String::new();
     loop {
         line.clear();

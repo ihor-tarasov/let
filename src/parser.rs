@@ -1,32 +1,28 @@
 use std::{collections::HashMap, ops::Range};
 
 use crate::{
-    compiler::Compiler,
-    error::{raise, Error},
-    lexer::Lexer,
-    precedence::get_precedence,
-    token::Token,
+    emiter::Emiter, error::Error, lexer::Lexer, precedence::get_precedence, raise, token::Token,
 };
 
 pub type ParserResult = Result<(), Error>;
 
-pub struct Parser<I: Iterator, C> {
+pub struct Parser<I: Iterator, E> {
     lexer: Lexer<I>,
     token: Option<Token>,
     range: Range<usize>,
-    compiler: C,
+    emiter: E,
     lable_id: usize,
     local_id: usize,
     locals: Vec<HashMap<Box<[u8]>, usize>>, // TODO: Optimize
 }
 
-impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
-    pub fn new(iter: I, compiler: C) -> Self {
+impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
+    pub fn new(iter: I, emiter: E) -> Self {
         Self {
             lexer: iter.into(),
             token: None,
             range: 0..0,
-            compiler,
+            emiter,
             lable_id: 0,
             local_id: 0,
             locals: Vec::new(),
@@ -82,14 +78,14 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
     }
 
     fn integer(&mut self) -> ParserResult {
-        self.compiler
+        self.emiter
             .integer(std::str::from_utf8(self.lexer.buffer())?.parse()?)?;
         self.next(); // Skip integer token.
         Ok(())
     }
 
     fn real(&mut self) -> ParserResult {
-        self.compiler
+        self.emiter
             .real(std::str::from_utf8(self.lexer.buffer())?.parse()?)?;
         self.next(); // Skip real token.
         Ok(())
@@ -99,7 +95,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         self.next(); // Skip '(' token.
         self.expression()?;
         if !self.token_is_buf(Token::Operator, &[b')']) {
-            return raise("Expected ')'".to_string());
+            return raise!("Expected ')'");
         }
         self.next();
         Ok(())
@@ -116,9 +112,9 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
     fn identifier(&mut self) -> ParserResult {
         if let Some(index) = self.find_variable(self.lexer.buffer()) {
-            self.compiler.load(index as u64)?;
+            self.emiter.load(index as u64)?;
         } else {
-            self.compiler.pointer(self.lexer.buffer())?;
+            self.emiter.pointer(self.lexer.buffer())?;
         }
         self.next(); // Skip identifier.
 
@@ -132,7 +128,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         let mut arguments = 0;
         loop {
             if arguments >= u8::MAX as usize {
-                return raise("Reached maximum function argumens number".to_string())
+                return raise!("Reached maximum function argumens number");
             }
 
             self.expression()?;
@@ -145,7 +141,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
         self.next(); // Skip ')'.
 
-        self.compiler.call(arguments as u8)
+        self.emiter.call(arguments as u8)
     }
 
     fn primary(&mut self) -> ParserResult {
@@ -155,7 +151,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             (Some(Token::Integer), _) => self.integer(),
             (Some(Token::Real), _) => self.real(),
             (Some(Token::Operator), b"(") => self.paren(),
-            _ => raise("Unknown token.".to_string()),
+            _ => raise!("Unknown token."),
         }
     }
 
@@ -179,7 +175,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
             self.primary()?;
 
-            self.compiler.binary(operator)?;
+            self.emiter.binary(operator)?;
 
             let next_precedence = self.precedence();
             if current_precedence < next_precedence {
@@ -212,7 +208,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             .insert(Vec::from(self.lexer.buffer()).into_boxed_slice(), index)
             .is_some()
         {
-            return raise(format!("Variable \"{:?}\" already exists.", self.lexer.buffer()));
+            return raise!("Variable \"{:?}\" already exists.", self.lexer.buffer());
         }
         Ok(())
     }
@@ -225,7 +221,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         // Condition
         self.expression()?;
         let mut next_id = self.get_lable_id();
-        self.compiler.jump_false(next_id as u64)?;
+        self.emiter.jump_false(next_id as u64)?;
 
         // Block.
         self.enter_block();
@@ -235,33 +231,33 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         loop {
             if self.token_is_buf(Token::Identifier, b"end") {
                 self.next(); // Skip "end"
-                self.compiler.lable(next_id as u64)?;
-                self.compiler.lable(end_if_id as u64)?;
+                self.emiter.lable(next_id as u64)?;
+                self.emiter.lable(end_if_id as u64)?;
                 break;
             } else if self.token_is_buf(Token::Identifier, b"elif") {
                 self.next(); // Skip "elif"
-                self.compiler.jump(end_if_id as u64)?;
-                self.compiler.lable(next_id as u64)?;
+                self.emiter.jump(end_if_id as u64)?;
+                self.emiter.lable(next_id as u64)?;
                 self.expression()?; // Condition.
                 next_id = self.get_lable_id();
-                self.compiler.jump_false(next_id as u64)?;
+                self.emiter.jump_false(next_id as u64)?;
                 // Block.
                 self.enter_block();
                 self.expression()?;
                 self.exit_block();
             } else if self.token_is_buf(Token::Identifier, b"else") {
                 self.next(); // Skip "else"
-                self.compiler.jump(end_if_id as u64)?;
-                self.compiler.lable(next_id as u64)?;
+                self.emiter.jump(end_if_id as u64)?;
+                self.emiter.lable(next_id as u64)?;
                 // Block.
                 self.enter_block();
                 self.expression()?;
                 self.exit_block();
                 if !self.token_is_buf(Token::Identifier, b"end") {
-                    return raise("Expected \"end\".".to_string());
+                    return raise!("Expected \"end\".");
                 }
                 self.next(); // Skip "end"
-                self.compiler.lable(end_if_id as u64)?;
+                self.emiter.lable(end_if_id as u64)?;
                 break;
             }
         }
@@ -271,14 +267,14 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
 
     fn prototype(&mut self) -> ParserResult {
         if !self.token_is(Token::Identifier) {
-            return raise("Expected function name.".to_string());
+            return raise!("Expected function name.");
         }
 
-        self.compiler.lable_named(self.lexer.buffer())?;
+        self.emiter.lable_named(self.lexer.buffer())?;
         self.next();
 
         if !self.token_is_buf(Token::Operator, &[b'(']) {
-            return raise("Expected '('.".to_string());
+            return raise!("Expected '('.");
         }
         self.next();
 
@@ -288,7 +284,7 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
         }
 
         if !self.token_is_buf(Token::Operator, &[b')']) {
-            return raise("Expected ')'.".to_string());
+            return raise!("Expected ')'.");
         }
 
         self.next();
@@ -308,27 +304,27 @@ impl<I: Iterator<Item = u8>, C: Compiler> Parser<I, C> {
             if first {
                 first = false;
             } else {
-                self.compiler.end_of_statement()?;
+                self.emiter.end_of_statement()?;
             }
             self.expression()?;
         }
 
         if !self.token_is_buf(Token::Identifier, b"end") {
-            return raise("Expected \"end\".".to_string());
+            return raise!("Expected \"end\".");
         }
 
         self.next();
 
-        self.compiler.ret()?;
+        self.emiter.ret()?;
         self.exit_block();
 
         Ok(())
     }
 
     fn global_code(&mut self) -> ParserResult {
-        self.compiler.lable_named(b"__ctor__")?;
+        self.emiter.lable_named(b"__ctor__")?;
         self.expression()?;
-        self.compiler.ret()
+        self.emiter.ret()
     }
 
     pub fn parse(&mut self) -> ParserResult {
