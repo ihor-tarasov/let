@@ -1,9 +1,0 @@
-lable factorial 0
-link @lbl_1 6
-link @lbl_0 17
-lable @lbl_1 25
-link factorial 28
-lable @lbl_0 44
-lable __ctor__ 44
-link print 45
-link factorial 54

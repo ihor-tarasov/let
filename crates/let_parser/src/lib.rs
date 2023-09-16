@@ -7,7 +7,7 @@ use std::{collections::HashMap, ops::Range};
 
 pub use let_result::Result;
 
-struct Parser<I: Iterator, E> {
+pub struct Parser<I: Iterator, E> {
     lexer: lexer::Lexer<I>,
     token: Option<token::Token>,
     range: Range<usize>,
@@ -22,7 +22,7 @@ where
     I: Iterator<Item = u8>,
     E: let_emitter::Emitter,
 {
-    fn new(iter: I, emiter: E) -> Self {
+    pub fn new(iter: I, emiter: E) -> Self {
         Self {
             lexer: iter.into(),
             token: None,
@@ -189,6 +189,33 @@ where
         }
     }
 
+    fn block(&mut self, ends: &[&[u8]]) -> let_result::Result {
+        let mut first = true;
+
+        loop {
+            let mut found = false;
+            for &end in ends {
+                if self.token_is_buf(token::Token::Identifier, end) {
+                    found = true;
+                }
+            }
+
+            if found {
+                break;
+            }
+
+            if first {
+                first = false;
+            } else {
+                self.emiter.drop()?;
+            }
+
+            self.expression()?;
+        }
+
+        Ok(())
+    }
+
     fn expression(&mut self) -> let_result::Result {
         self.primary()?;
         self.binary(1)
@@ -230,39 +257,36 @@ where
 
         // Block.
         self.enter_block();
-        self.expression()?;
+        self.block(&[b"end", b"else", b"elif"])?;
         self.exit_block();
 
         loop {
             if self.token_is_buf(token::Token::Identifier, b"end") {
                 self.next(); // Skip "end"
-                self.emiter.lable(next_id as u64)?;
-                self.emiter.lable(end_if_id as u64)?;
+                self.emiter.label(next_id as u64)?;
+                self.emiter.label(end_if_id as u64)?;
                 break;
             } else if self.token_is_buf(token::Token::Identifier, b"elif") {
                 self.next(); // Skip "elif"
                 self.emiter.jump(end_if_id as u64)?;
-                self.emiter.lable(next_id as u64)?;
+                self.emiter.label(next_id as u64)?;
                 self.expression()?; // Condition.
                 next_id = self.get_lable_id();
                 self.emiter.jump_false(next_id as u64)?;
                 // Block.
                 self.enter_block();
-                self.expression()?;
+                self.block(&[b"end", b"else", b"elif"])?;
                 self.exit_block();
             } else if self.token_is_buf(token::Token::Identifier, b"else") {
                 self.next(); // Skip "else"
                 self.emiter.jump(end_if_id as u64)?;
-                self.emiter.lable(next_id as u64)?;
+                self.emiter.label(next_id as u64)?;
                 // Block.
                 self.enter_block();
-                self.expression()?;
+                self.block(&[b"end"])?;
                 self.exit_block();
-                if !self.token_is_buf(token::Token::Identifier, b"end") {
-                    return let_result::raise!("Expected \"end\".");
-                }
                 self.next(); // Skip "end"
-                self.emiter.lable(end_if_id as u64)?;
+                self.emiter.label(end_if_id as u64)?;
                 break;
             }
         }
@@ -275,7 +299,7 @@ where
             return let_result::raise!("Expected function name.");
         }
 
-        self.emiter.lable_named(self.lexer.buffer())?;
+        self.emiter.label_named(self.lexer.buffer())?;
         self.next();
 
         if !self.token_is_buf(token::Token::Operator, &[b'(']) {
@@ -303,21 +327,7 @@ where
         self.enter_block();
         self.prototype()?;
 
-        let mut first = true;
-
-        while !self.token_is_buf(token::Token::Identifier, b"end") {
-            if first {
-                first = false;
-            } else {
-                self.emiter.end_of_statement()?;
-            }
-            self.expression()?;
-        }
-
-        if !self.token_is_buf(token::Token::Identifier, b"end") {
-            return let_result::raise!("Expected \"end\".");
-        }
-
+        self.block(&[b"end"])?;
         self.next();
 
         self.emiter.ret()?;
@@ -327,12 +337,12 @@ where
     }
 
     fn global_code(&mut self) -> let_result::Result {
-        self.emiter.lable_named(b"__ctor__")?;
+        self.emiter.label_named(b"__ctor__")?;
         self.expression()?;
         self.emiter.ret()
     }
 
-    fn parse(&mut self) -> let_result::Result {
+    pub fn parse(&mut self) -> let_result::Result {
         self.next();
         loop {
             match (self.token, self.lexer.buffer()) {
@@ -343,12 +353,8 @@ where
         }
         Ok(())
     }
-}
 
-pub fn parse<I, E>(iter: I, emiter: E) -> let_result::Result
-where
-    I: Iterator<Item = u8>,
-    E: let_emitter::Emitter,
-{
-    Parser::new(iter, emiter).parse()
+    pub fn range(&self) -> std::ops::Range<usize> {
+        self.range.clone()
+    }
 }

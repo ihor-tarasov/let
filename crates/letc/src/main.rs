@@ -1,18 +1,43 @@
+use std::io::Seek;
+use std::fmt::Write;
+
 mod assembly_emiter;
 mod read_iter;
+mod line;
+
+fn parse<R, E>(path: &str, file: R, emitter: E) -> let_result::Result
+where
+    R: std::io::Read + std::io::Seek,
+    E: let_emitter::Emitter,
+{
+    let mut iter = read_iter::ReadIter::new(file, 1024);
+    let mut parser = let_parser::Parser::new(&mut iter, emitter);
+    if let Err(error) = parser.parse() {
+        let range = parser.range();
+        iter.seek(std::io::SeekFrom::Start(0))?;
+        let info = line::create(&mut iter, range.start);
+        let mut buffer = String::new();
+        writeln!(buffer, "File \"{path}\", line: {}:", info.number).unwrap();
+        line::print_line(&mut iter, info.start, &mut buffer);
+        line::mark_range(info.start, range, &mut buffer);
+        writeln!(buffer, "Compile error: {}", error).unwrap();
+        return Err(let_result::Error::Custom(Box::new(buffer)))
+    }
+    if let Some(error) = iter.get_error() {
+        return let_result::raise!("Error reading file \"{path}\", IOError: {error}");
+    }
+    Ok(())
+}
 
 fn compile(path: &str, compile_assembly: bool) -> let_result::Result {
     let start = std::time::Instant::now();
     match std::fs::File::open(path) {
         Ok(file) => {
-            let mut iter = read_iter::ReadIter::new(file, 1024);
+            
             if compile_assembly {
-                let_parser::parse(&mut iter, assembly_emiter::open(path)?)?;
+                parse(path, file, assembly_emiter::open(path)?)?;
             } else {
-                let_parser::parse(&mut iter, let_object_emitter::open(path)?)?;
-            }
-            if let Some(error) = iter.get_error() {
-                return let_result::raise!("Error reading file \"{path}\", IOError: {error}");
+                parse(path, file, let_object_emitter::open(path)?)?;
             }
             println!(
                 "Compiled \"{path}\", time: {} seconds",
@@ -36,7 +61,7 @@ fn main() -> std::process::ExitCode {
             match compile(&arg, compile_assembly) {
                 Ok(_) => (),
                 Err(error) => {
-                    eprintln!("Error: {error:?}");
+                    eprintln!("{error}");
                     return std::process::ExitCode::FAILURE;
                 }
             }

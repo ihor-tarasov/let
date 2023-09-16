@@ -4,6 +4,7 @@ fn factorial(n)
         1
     else
         n * factorial(n - 1)
+        2 + 2
     end
 end
 

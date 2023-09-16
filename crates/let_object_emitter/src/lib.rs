@@ -91,16 +91,16 @@ where
         Ok(())
     }
 
-    fn end_of_statement(&mut self) -> let_emitter::Result {
+    fn drop(&mut self) -> let_emitter::Result {
         todo!()
     }
 
-    fn lable(&mut self, id: u64) -> let_emitter::Result {
+    fn label(&mut self, id: u64) -> let_emitter::Result {
         writeln!(self.metadata_write, "lable @lbl_{id} {}", self.counter)?;
         Ok(())
     }
 
-    fn lable_named(&mut self, lable: &[u8]) -> let_emitter::Result {
+    fn label_named(&mut self, lable: &[u8]) -> let_emitter::Result {
         writeln!(
             self.metadata_write,
             "lable {} {}",

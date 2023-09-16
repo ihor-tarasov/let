@@ -8,9 +8,9 @@ pub trait Emitter {
     fn call(&mut self, arguments: u8) -> let_result::Result;
     fn binary(&mut self, operator: [u8; 3]) -> let_result::Result;
     fn ret(&mut self) -> let_result::Result;
-    fn end_of_statement(&mut self) -> let_result::Result;
-    fn lable(&mut self, id: u64) -> let_result::Result;
-    fn lable_named(&mut self, lable: &[u8]) -> let_result::Result;
+    fn drop(&mut self) -> let_result::Result;
+    fn label(&mut self, id: u64) -> let_result::Result;
+    fn label_named(&mut self, lable: &[u8]) -> let_result::Result;
     fn jump(&mut self, id: u64) -> let_result::Result;
     fn jump_name(&mut self, name: &[u8]) -> let_result::Result;
     fn jump_false(&mut self, id: u64) -> let_result::Result;

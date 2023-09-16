@@ -67,3 +67,19 @@ where
         }
     }
 }
+
+impl<R> std::io::Seek for ReadIter<R>
+where
+    R: std::io::Seek + std::io::Read,
+{
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        match pos {
+            std::io::SeekFrom::Start(_) => {
+                self.buffer_size = 0;
+                self.offset = 0;
+                self.read.seek(pos)
+            },
+            _ => panic!("ReadIter supports only SeekFrom::Start type."),
+        }
+    }
+}

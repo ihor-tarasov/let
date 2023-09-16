@@ -15,7 +15,7 @@ where
 
         // Handle lables
         while let Some(index) = line.find(':') {
-            self.emiter.lable_named(line[0..index].trim().as_bytes())?;
+            self.emiter.label_named(line[0..index].trim().as_bytes())?;
             line = &line[(index + 1)..];
 
             if line.is_empty() {

@@ -31,6 +31,18 @@ impl From<std::io::Error> for Error {
     }
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Utf8(error) => write!(f, "{error}"),
+            Error::ParseInt(error) => write!(f, "{error}"),
+            Error::ParseFloat(error) => write!(f, "{error}"),
+            Error::Custom(error) => write!(f, "{error}"),
+            Error::IO(error) => write!(f, "{error}"),
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! raise {
     ($($arg:tt)*) => {

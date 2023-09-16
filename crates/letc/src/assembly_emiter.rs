@@ -42,17 +42,17 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         Ok(())
     }
 
-    fn end_of_statement(&mut self) -> let_emitter::Result {
+    fn drop(&mut self) -> let_emitter::Result {
         writeln!(self.0, "\tDROP")?;
         Ok(())
     }
 
-    fn lable(&mut self, id: u64) -> let_emitter::Result {
+    fn label(&mut self, id: u64) -> let_emitter::Result {
         writeln!(self.0, "@lbl_{id}:")?;
         Ok(())
     }
 
-    fn lable_named(&mut self, lable: &[u8]) -> let_emitter::Result {
+    fn label_named(&mut self, lable: &[u8]) -> let_emitter::Result {
         writeln!(self.0, "{}:", Slice(lable))?;
         Ok(())
     }
