@@ -2,7 +2,6 @@ use std::io::Seek;
 use std::fmt::Write;
 
 mod assembly_emiter;
-mod read_iter;
 mod line;
 
 fn parse<R, E>(path: &str, file: R, emitter: E) -> let_result::Result

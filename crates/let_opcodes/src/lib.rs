@@ -5,7 +5,7 @@ macro_rules! impl_opcodes {
 }
 
 impl_opcodes!(
-    // 1 byte opcodes
+    // 0x00..=0x2F 1 byte opcodes
     RET: 0x00
     DROP: 0x01
 
@@ -18,16 +18,16 @@ impl_opcodes!(
     SUB: 0x15
     MUL: 0x16
 
-    // 2 bytes opcodes
+    // 0x30..=0x4F 2 bytes opcodes
     LD1: 0x30
     INT1: 0x31
     CALL: 0x32
 
-    // 4 bytes opcodes
+    // 0x50..=0x6F 4 bytes opcodes
     INT3: 0x50
     LD3: 0x51
 
-    // 9 byte opcodes
+    // 0x70..=0xFF 9 byte opcodes
     JPF: 0x70
     JP: 0x71
     PTR: 0x72

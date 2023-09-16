@@ -18,7 +18,7 @@ impl<'a> fmt::Display for Slice<'a> {
 pub struct ObjectEmitter<O, L, B> {
     object_write: O,
     links_write: L,
-    lablels_write: B,
+    labels_write: B,
     counter: u64,
 }
 
@@ -27,7 +27,7 @@ impl<O, L, B> ObjectEmitter<O, L, B> {
         Self {
             object_write: object,
             links_write: links,
-            lablels_write: labels,
+            labels_write: labels,
             counter: 0,
         }
     }
@@ -96,13 +96,13 @@ where
     }
 
     fn label(&mut self, id: u64) -> let_emitter::Result {
-        writeln!(self.lablels_write, "@lbl_{id} {}", self.counter)?;
+        writeln!(self.labels_write, "@lbl_{id} {}", self.counter)?;
         Ok(())
     }
 
     fn label_named(&mut self, lable: &[u8]) -> let_emitter::Result {
         writeln!(
-            self.lablels_write,
+            self.labels_write,
             "{} {}",
             Slice(lable),
             self.counter

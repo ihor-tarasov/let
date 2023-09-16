@@ -50,4 +50,9 @@ dependencies = [
  "let_object_emitter",
  "let_parser",
  "let_result",
+ "read_iter",
 ]
+
+[[package]]
+name = "read_iter"
+version = "0.1.0"
