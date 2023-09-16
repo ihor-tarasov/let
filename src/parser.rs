@@ -6,7 +6,7 @@ use crate::{
 
 pub type ParserResult = Result<(), Error>;
 
-pub struct Parser<I: Iterator, E> {
+struct Parser<I: Iterator, E> {
     lexer: Lexer<I>,
     token: Option<Token>,
     range: Range<usize>,
@@ -17,7 +17,7 @@ pub struct Parser<I: Iterator, E> {
 }
 
 impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
-    pub fn new(iter: I, emiter: E) -> Self {
+    fn new(iter: I, emiter: E) -> Self {
         Self {
             lexer: iter.into(),
             token: None,
@@ -327,7 +327,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         self.emiter.ret()
     }
 
-    pub fn parse(&mut self) -> ParserResult {
+    fn parse(&mut self) -> ParserResult {
         self.next();
         loop {
             match (self.token, self.lexer.buffer()) {
@@ -338,4 +338,12 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         }
         Ok(())
     }
+}
+
+pub fn parse<I, E>(iter: I, emiter: E) -> ParserResult
+where
+    I: Iterator<Item = u8>,
+    E: Emiter,
+{
+    Parser::new(iter, emiter).parse()
 }

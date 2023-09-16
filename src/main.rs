@@ -3,12 +3,10 @@ where
     R: std::io::Read,
     W: std::io::Write,
 {
-    let mut parser = letx::Parser::new(
+    letx::parse(
         letx::ReadIter::new(read, 1024),
         letx::AssemblyEmiter::from(std::io::BufWriter::new(write)),
-    );
-
-    parser.parse()
+    )
 }
 
 fn create_file_and_parse<R>(read: R, path: &str) -> letx::ParserResult
