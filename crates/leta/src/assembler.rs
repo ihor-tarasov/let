@@ -1,20 +1,16 @@
-use crate::{emiter::Emiter, error::Error, raise};
-
-pub type AssemblerResult = Result<(), Error>;
-
 struct Assembler<E> {
     emiter: E,
 }
 
 impl<E> Assembler<E>
 where
-    E: Emiter,
+    E: let_object_emitter::Emitter,
 {
     fn new(emiter: E) -> Self {
         Self { emiter }
     }
 
-    fn assemble(&mut self, mut line: &str) -> AssemblerResult {
+    fn assemble(&mut self, mut line: &str) -> let_result::Result {
         line = line.trim();
 
         // Handle lables
@@ -39,7 +35,7 @@ where
         } else if line.starts_with("OP ") {
             line = line[3..].trim();
             if line.len() > 3 || line.is_empty() {
-                return raise!("Wrong operator triplet");
+                return let_result::raise!("Wrong operator triplet");
             }
             let operator = [
                 line.as_bytes().get(0).cloned().unwrap_or(b' '),
@@ -59,15 +55,15 @@ where
             line = line[5..].trim();
             self.emiter.call(line.parse::<u8>()?)
         } else {
-            raise!("UnexpeEted line \"{}\"", line)
+            let_result::raise!("UnexpeEted line \"{}\"", line)
         }
     }
 }
 
-pub fn assemble<R, E>(mut read: R, emiter: E) -> AssemblerResult
+pub fn assemble<R, E>(mut read: R, emiter: E) -> let_result::Result
 where
     R: std::io::BufRead,
-    E: Emiter,
+    E: let_object_emitter::Emitter,
 {
     let mut assembler = Assembler::new(emiter);
     let mut line = String::new();

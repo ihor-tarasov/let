@@ -3,5 +3,51 @@
 version = 3
 
 [[package]]
-name = "letx"
+name = "let_emitter"
 version = "0.1.0"
+dependencies = [
+ "let_result",
+]
+
+[[package]]
+name = "let_object_emitter"
+version = "0.1.0"
+dependencies = [
+ "let_emitter",
+ "let_opcodes",
+ "let_result",
+]
+
+[[package]]
+name = "let_opcodes"
+version = "0.1.0"
+
+[[package]]
+name = "let_parser"
+version = "0.1.0"
+dependencies = [
+ "let_emitter",
+ "let_result",
+]
+
+[[package]]
+name = "let_result"
+version = "0.1.0"
+
+[[package]]
+name = "leta"
+version = "0.1.0"
+dependencies = [
+ "let_object_emitter",
+ "let_result",
+]
+
+[[package]]
+name = "letc"
+version = "0.1.0"
+dependencies = [
+ "let_emitter",
+ "let_object_emitter",
+ "let_parser",
+ "let_result",
+]

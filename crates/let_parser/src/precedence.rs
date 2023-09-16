@@ -41,7 +41,7 @@ const PRECEDENCES: [(u8, u8, u8, u8); 29] = [
     (b'|', b'|', b' ', OR_PRECEDENCE),
 ];
 
-pub fn get_precedence(c: (u8, u8, u8)) -> u8 {
+pub fn get(c: (u8, u8, u8)) -> u8 {
     match PRECEDENCES.binary_search_by_key(&c, |&c| (c.0, c.1, c.2)) {
         Ok(index) => PRECEDENCES[index].3,
         Err(_) => 0,

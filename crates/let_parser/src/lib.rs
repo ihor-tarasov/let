@@ -1,14 +1,15 @@
+mod lexer;
+mod operators;
+mod precedence;
+mod token;
+
 use std::{collections::HashMap, ops::Range};
 
-use crate::{
-    emiter::Emiter, error::Error, lexer::Lexer, precedence::get_precedence, raise, token::Token,
-};
-
-pub type ParserResult = Result<(), Error>;
+pub use let_result::Result;
 
 struct Parser<I: Iterator, E> {
-    lexer: Lexer<I>,
-    token: Option<Token>,
+    lexer: lexer::Lexer<I>,
+    token: Option<token::Token>,
     range: Range<usize>,
     emiter: E,
     lable_id: usize,
@@ -16,7 +17,11 @@ struct Parser<I: Iterator, E> {
     locals: Vec<HashMap<Box<[u8]>, usize>>, // TODO: Optimize
 }
 
-impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
+impl<I, E> Parser<I, E>
+where
+    I: Iterator<Item = u8>,
+    E: let_emitter::Emitter,
+{
     fn new(iter: I, emiter: E) -> Self {
         Self {
             lexer: iter.into(),
@@ -52,14 +57,14 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
     fn precedence(&self) -> u8 {
         let buf = self.lexer.buffer();
         match buf.len() {
-            1 => get_precedence((buf[0], b' ', b' ')),
-            2 => get_precedence((buf[0], buf[1], b' ')),
-            3 => get_precedence((buf[0], buf[1], buf[2])),
+            1 => precedence::get((buf[0], b' ', b' ')),
+            2 => precedence::get((buf[0], buf[1], b' ')),
+            3 => precedence::get((buf[0], buf[1], buf[2])),
             _ => 0,
         }
     }
 
-    fn token_is(&self, token: Token) -> bool {
+    fn token_is(&self, token: token::Token) -> bool {
         if let Some(current) = self.token {
             if current == token {
                 return true;
@@ -68,7 +73,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         false
     }
 
-    fn token_is_buf(&self, token: Token, s: &[u8]) -> bool {
+    fn token_is_buf(&self, token: token::Token, s: &[u8]) -> bool {
         if let Some(current) = self.token {
             if current == token && self.lexer.buffer() == s {
                 return true;
@@ -77,25 +82,25 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         false
     }
 
-    fn integer(&mut self) -> ParserResult {
+    fn integer(&mut self) -> let_result::Result {
         self.emiter
             .integer(std::str::from_utf8(self.lexer.buffer())?.parse()?)?;
         self.next(); // Skip integer token.
         Ok(())
     }
 
-    fn real(&mut self) -> ParserResult {
+    fn real(&mut self) -> let_result::Result {
         self.emiter
             .real(std::str::from_utf8(self.lexer.buffer())?.parse()?)?;
         self.next(); // Skip real token.
         Ok(())
     }
 
-    fn paren(&mut self) -> ParserResult {
+    fn paren(&mut self) -> let_result::Result {
         self.next(); // Skip '(' token.
         self.expression()?;
-        if !self.token_is_buf(Token::Operator, &[b')']) {
-            return raise!("Expected ')'");
+        if !self.token_is_buf(token::Token::Operator, &[b')']) {
+            return let_result::raise!("Expected ')'");
         }
         self.next();
         Ok(())
@@ -110,7 +115,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         None
     }
 
-    fn identifier(&mut self) -> ParserResult {
+    fn identifier(&mut self) -> let_result::Result {
         if let Some(index) = self.find_variable(self.lexer.buffer()) {
             self.emiter.load(index as u64)?;
         } else {
@@ -118,7 +123,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         }
         self.next(); // Skip identifier.
 
-        if !self.token_is_buf(Token::Operator, &[b'(']) {
+        if !self.token_is_buf(token::Token::Operator, &[b'(']) {
             return Ok(());
         }
 
@@ -128,13 +133,13 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         let mut arguments = 0;
         loop {
             if arguments >= u8::MAX as usize {
-                return raise!("Reached maximum function argumens number");
+                return let_result::raise!("Reached maximum function argumens number");
             }
 
             self.expression()?;
             arguments += 1;
 
-            if self.token_is_buf(Token::Operator, &[b')']) {
+            if self.token_is_buf(token::Token::Operator, &[b')']) {
                 break;
             }
         }
@@ -144,18 +149,18 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         self.emiter.call(arguments as u8)
     }
 
-    fn primary(&mut self) -> ParserResult {
+    fn primary(&mut self) -> let_result::Result {
         match (self.token, self.lexer.buffer()) {
-            (Some(Token::Identifier), b"if") => self.p_if(),
-            (Some(Token::Identifier), _) => self.identifier(),
-            (Some(Token::Integer), _) => self.integer(),
-            (Some(Token::Real), _) => self.real(),
-            (Some(Token::Operator), b"(") => self.paren(),
-            _ => raise!("Unknown token."),
+            (Some(token::Token::Identifier), b"if") => self.p_if(),
+            (Some(token::Token::Identifier), _) => self.identifier(),
+            (Some(token::Token::Integer), _) => self.integer(),
+            (Some(token::Token::Real), _) => self.real(),
+            (Some(token::Token::Operator), b"(") => self.paren(),
+            _ => let_result::raise!("Unknown token."),
         }
     }
 
-    fn binary(&mut self, precedence: u8) -> ParserResult {
+    fn binary(&mut self, precedence: u8) -> let_result::Result {
         loop {
             let current_precedence = self.precedence();
 
@@ -184,7 +189,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         }
     }
 
-    fn expression(&mut self) -> ParserResult {
+    fn expression(&mut self) -> let_result::Result {
         self.primary()?;
         self.binary(1)
     }
@@ -199,7 +204,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         self.locals.pop().unwrap();
     }
 
-    fn add_local(&mut self) -> ParserResult {
+    fn add_local(&mut self) -> let_result::Result {
         let index = self.get_local_id();
         if self
             .locals
@@ -208,12 +213,12 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
             .insert(Vec::from(self.lexer.buffer()).into_boxed_slice(), index)
             .is_some()
         {
-            return raise!("Variable \"{:?}\" already exists.", self.lexer.buffer());
+            return let_result::raise!("Variable \"{:?}\" already exists.", self.lexer.buffer());
         }
         Ok(())
     }
 
-    fn p_if(&mut self) -> ParserResult {
+    fn p_if(&mut self) -> let_result::Result {
         self.next(); // Skip "if"
 
         let end_if_id = self.get_lable_id();
@@ -229,12 +234,12 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         self.exit_block();
 
         loop {
-            if self.token_is_buf(Token::Identifier, b"end") {
+            if self.token_is_buf(token::Token::Identifier, b"end") {
                 self.next(); // Skip "end"
                 self.emiter.lable(next_id as u64)?;
                 self.emiter.lable(end_if_id as u64)?;
                 break;
-            } else if self.token_is_buf(Token::Identifier, b"elif") {
+            } else if self.token_is_buf(token::Token::Identifier, b"elif") {
                 self.next(); // Skip "elif"
                 self.emiter.jump(end_if_id as u64)?;
                 self.emiter.lable(next_id as u64)?;
@@ -245,7 +250,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
                 self.enter_block();
                 self.expression()?;
                 self.exit_block();
-            } else if self.token_is_buf(Token::Identifier, b"else") {
+            } else if self.token_is_buf(token::Token::Identifier, b"else") {
                 self.next(); // Skip "else"
                 self.emiter.jump(end_if_id as u64)?;
                 self.emiter.lable(next_id as u64)?;
@@ -253,8 +258,8 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
                 self.enter_block();
                 self.expression()?;
                 self.exit_block();
-                if !self.token_is_buf(Token::Identifier, b"end") {
-                    return raise!("Expected \"end\".");
+                if !self.token_is_buf(token::Token::Identifier, b"end") {
+                    return let_result::raise!("Expected \"end\".");
                 }
                 self.next(); // Skip "end"
                 self.emiter.lable(end_if_id as u64)?;
@@ -265,26 +270,26 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         Ok(())
     }
 
-    fn prototype(&mut self) -> ParserResult {
-        if !self.token_is(Token::Identifier) {
-            return raise!("Expected function name.");
+    fn prototype(&mut self) -> let_result::Result {
+        if !self.token_is(token::Token::Identifier) {
+            return let_result::raise!("Expected function name.");
         }
 
         self.emiter.lable_named(self.lexer.buffer())?;
         self.next();
 
-        if !self.token_is_buf(Token::Operator, &[b'(']) {
-            return raise!("Expected '('.");
+        if !self.token_is_buf(token::Token::Operator, &[b'(']) {
+            return let_result::raise!("Expected '('.");
         }
         self.next();
 
-        while self.token_is(Token::Identifier) {
+        while self.token_is(token::Token::Identifier) {
             self.add_local()?;
             self.next();
         }
 
-        if !self.token_is_buf(Token::Operator, &[b')']) {
-            return raise!("Expected ')'.");
+        if !self.token_is_buf(token::Token::Operator, &[b')']) {
+            return let_result::raise!("Expected ')'.");
         }
 
         self.next();
@@ -292,7 +297,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         Ok(())
     }
 
-    fn function(&mut self) -> ParserResult {
+    fn function(&mut self) -> let_result::Result {
         self.next(); // Skip "fn"
 
         self.enter_block();
@@ -300,7 +305,7 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
 
         let mut first = true;
 
-        while !self.token_is_buf(Token::Identifier, b"end") {
+        while !self.token_is_buf(token::Token::Identifier, b"end") {
             if first {
                 first = false;
             } else {
@@ -309,8 +314,8 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
             self.expression()?;
         }
 
-        if !self.token_is_buf(Token::Identifier, b"end") {
-            return raise!("Expected \"end\".");
+        if !self.token_is_buf(token::Token::Identifier, b"end") {
+            return let_result::raise!("Expected \"end\".");
         }
 
         self.next();
@@ -321,18 +326,18 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
         Ok(())
     }
 
-    fn global_code(&mut self) -> ParserResult {
+    fn global_code(&mut self) -> let_result::Result {
         self.emiter.lable_named(b"__ctor__")?;
         self.expression()?;
         self.emiter.ret()
     }
 
-    fn parse(&mut self) -> ParserResult {
+    fn parse(&mut self) -> let_result::Result {
         self.next();
         loop {
             match (self.token, self.lexer.buffer()) {
                 (None, _) => break,
-                (Some(Token::Identifier), b"fn") => self.function()?,
+                (Some(token::Token::Identifier), b"fn") => self.function()?,
                 _ => self.global_code()?,
             }
         }
@@ -340,10 +345,10 @@ impl<I: Iterator<Item = u8>, E: Emiter> Parser<I, E> {
     }
 }
 
-pub fn parse<I, E>(iter: I, emiter: E) -> ParserResult
+pub fn parse<I, E>(iter: I, emiter: E) -> let_result::Result
 where
     I: Iterator<Item = u8>,
-    E: Emiter,
+    E: let_emitter::Emitter,
 {
     Parser::new(iter, emiter).parse()
 }
