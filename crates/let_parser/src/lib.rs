@@ -246,10 +246,9 @@ where
     }
 
     fn p_if(&mut self) -> let_result::Result {
-        self.next(); // Skip "if"
-
         let end_if_id = self.get_lable_id();
-
+        self.next(); // Skip "if"
+        
         // Condition
         self.expression()?;
         let mut next_id = self.get_lable_id();
@@ -262,14 +261,14 @@ where
 
         loop {
             if self.token_is_buf(token::Token::Identifier, b"end") {
-                self.next(); // Skip "end"
                 self.emiter.label(next_id as u64)?;
                 self.emiter.label(end_if_id as u64)?;
+                self.next(); // Skip "end"
                 break;
             } else if self.token_is_buf(token::Token::Identifier, b"elif") {
-                self.next(); // Skip "elif"
                 self.emiter.jump(end_if_id as u64)?;
                 self.emiter.label(next_id as u64)?;
+                self.next(); // Skip "elif"
                 self.expression()?; // Condition.
                 next_id = self.get_lable_id();
                 self.emiter.jump_false(next_id as u64)?;
@@ -278,15 +277,15 @@ where
                 self.block(&[b"end", b"else", b"elif"])?;
                 self.exit_block();
             } else if self.token_is_buf(token::Token::Identifier, b"else") {
-                self.next(); // Skip "else"
                 self.emiter.jump(end_if_id as u64)?;
                 self.emiter.label(next_id as u64)?;
                 // Block.
                 self.enter_block();
+                self.next(); // Skip "else"
                 self.block(&[b"end"])?;
                 self.exit_block();
-                self.next(); // Skip "end"
                 self.emiter.label(end_if_id as u64)?;
+                self.next(); // Skip "end"
                 break;
             }
         }
@@ -351,6 +350,7 @@ where
                 _ => self.global_code()?,
             }
         }
+        self.emiter.finish()?;
         Ok(())
     }
 
