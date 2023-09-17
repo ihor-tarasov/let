@@ -60,6 +60,10 @@ where
             let_result::raise!("UnexpeEted line \"{}\"", line)
         }
     }
+
+    fn finish(&mut self) -> let_result::Result {
+        self.emiter.finish()
+    }
 }
 
 pub fn assemble<R, E>(mut read: R, emiter: E) -> let_result::Result
@@ -72,7 +76,7 @@ where
     loop {
         line.clear();
         if read.read_line(&mut line)? == 0 {
-            break Ok(());
+            break assembler.finish();
         }
         assembler.assemble(line.as_str())?;
     }
