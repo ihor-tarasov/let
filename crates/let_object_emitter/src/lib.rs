@@ -114,12 +114,13 @@ impl Resolver {
             }
         }
         self.indexes.clear();
-        for label in self.labels.values() {
+        for label in self.labels.values_mut() {
             if let Some(address) = label.address {
                 for link in label.links.iter().cloned() {
                     write.seek(std::io::SeekFrom::Start(link as u64))?;
                     write.write_all(&address.to_be_bytes())?;
                 }
+                label.links.clear();
             }
         }
         Ok(())
