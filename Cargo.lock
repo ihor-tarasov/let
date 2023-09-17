@@ -3,6 +3,14 @@
 version = 3
 
 [[package]]
+name = "let_assembler"
+version = "0.1.0"
+dependencies = [
+ "let_emitter",
+ "let_result",
+]
+
+[[package]]
 name = "let_emitter"
 version = "0.1.0"
 dependencies = [
@@ -46,6 +54,7 @@ version = "0.1.0"
 name = "leta"
 version = "0.1.0"
 dependencies = [
+ "let_assembler",
  "let_object_emitter",
  "let_result",
 ]

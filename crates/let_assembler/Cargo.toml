@@ -1,0 +1,8 @@
+[package]
+name = "let_assembler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+let_result = { version = "0.1.0", path = "../let_result" }
+let_emitter = { version = "0.1.0", path = "../let_emitter" }

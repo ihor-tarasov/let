@@ -4,7 +4,7 @@ struct Assembler<E> {
 
 impl<E> Assembler<E>
 where
-    E: let_object_emitter::Emitter,
+    E: let_emitter::Emitter,
 {
     fn new(emiter: E) -> Self {
         Self { emiter }
@@ -65,7 +65,7 @@ where
 pub fn assemble<R, E>(mut read: R, emiter: E) -> let_result::Result
 where
     R: std::io::BufRead,
-    E: let_object_emitter::Emitter,
+    E: let_emitter::Emitter,
 {
     let mut assembler = Assembler::new(emiter);
     let mut line = String::new();

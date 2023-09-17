@@ -1,10 +1,9 @@
-mod assembler;
 
 fn assemble(path: &str) -> let_result::Result {
     let start = std::time::Instant::now();
     match std::fs::File::open(path) {
         Ok(file) => {
-            assembler::assemble(
+            let_assembler::assemble(
                 std::io::BufReader::new(file),
                 let_object_emitter::open(path)?,
             )?;
