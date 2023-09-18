@@ -341,7 +341,7 @@ where
         self.emiter.ret()
     }
 
-    pub fn parse(&mut self) -> let_result::Result {
+    pub fn parse(&mut self, module: &str) -> let_result::Result {
         self.next();
         loop {
             match (self.token, self.lexer.buffer()) {
@@ -350,7 +350,7 @@ where
                 _ => self.global_code()?,
             }
         }
-        self.emiter.finish()?;
+        self.emiter.finish(module)?;
         Ok(())
     }
 

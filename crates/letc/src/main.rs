@@ -1,5 +1,6 @@
-use std::io::Seek;
 use std::fmt::Write;
+use std::io::Seek;
+use std::path::Path;
 
 mod assembly_emiter;
 mod line;
@@ -11,7 +12,8 @@ where
 {
     let mut iter = read_iter::ReadIter::new(file, 1024);
     let mut parser = let_parser::Parser::new(&mut iter, emitter);
-    if let Err(error) = parser.parse() {
+    let module = Path::new(path).file_stem().unwrap().to_str().unwrap();
+    if let Err(error) = parser.parse(module) {
         let range = parser.range();
         iter.seek(std::io::SeekFrom::Start(0))?;
         let info = line::create(&mut iter, range.start);
@@ -20,7 +22,7 @@ where
         line::print_line(&mut iter, info.start, &mut buffer);
         line::mark_range(info.start, range, &mut buffer);
         writeln!(buffer, "Compile error: {}", error).unwrap();
-        return Err(let_result::Error::Custom(Box::new(buffer)))
+        return Err(let_result::Error::Custom(Box::new(buffer)));
     }
     if let Some(error) = iter.get_error() {
         return let_result::raise!("Error reading file \"{path}\", IOError: {error}");
@@ -32,11 +34,10 @@ fn compile(path: &str, compile_assembly: bool) -> let_result::Result {
     let start = std::time::Instant::now();
     match std::fs::File::open(path) {
         Ok(file) => {
-            
             if compile_assembly {
                 parse(path, file, assembly_emiter::open(path)?)?;
             } else {
-                parse(path, file, let_object_emitter::open(path)?)?;
+                parse(path, file, let_object_emitter::ObjectEmitter::new())?;
             }
             println!(
                 "Compiled \"{path}\", time: {} seconds",

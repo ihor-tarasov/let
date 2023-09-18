@@ -92,7 +92,7 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         Ok(())
     }
 
-    fn finish(&mut self) -> let_result::Result {
+    fn finish(&mut self, _module: &str) -> let_result::Result {
         Ok(())
     }
 }

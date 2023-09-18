@@ -99,15 +99,18 @@ impl Resolver {
         }
     }
 
-    pub fn resolve<W>(&mut self, write: &mut W) -> let_result::Result
-    where
-        W: std::io::Write + std::io::Seek,
-    {
+    pub fn resolve(&mut self, opcodes: &mut [u8]) -> let_result::Result {
         for label in self.indexes.values() {
             if let Some(address) = label.address {
                 for link in label.links.iter().cloned() {
-                    write.seek(std::io::SeekFrom::Start(link as u64))?;
-                    write.write_all(&address.to_be_bytes())?;
+                    address
+                        .to_be_bytes()
+                        .iter()
+                        .cloned()
+                        .enumerate()
+                        .for_each(|(i, b)| {
+                            opcodes[link as usize + i] = b;
+                        });
                 }
             }
         }
@@ -115,8 +118,14 @@ impl Resolver {
         for label in self.labels.values_mut() {
             if let Some(address) = label.address {
                 for link in label.links.iter().cloned() {
-                    write.seek(std::io::SeekFrom::Start(link as u64))?;
-                    write.write_all(&address.to_be_bytes())?;
+                    address
+                        .to_be_bytes()
+                        .iter()
+                        .cloned()
+                        .enumerate()
+                        .for_each(|(i, b)| {
+                            opcodes[link as usize + i] = b;
+                        });
                 }
                 label.links.clear();
             }
@@ -124,15 +133,20 @@ impl Resolver {
         Ok(())
     }
 
-    pub fn save_labels<W>(&self, write: &mut W) -> let_result::Result
+    pub fn save_labels<W>(&self, module: &str, write: &mut W) -> let_result::Result
     where
         W: std::io::Write,
     {
         for (name, label) in self.labels.iter() {
-            write!(write, "{}", Slice(name))?;
             if let Some(address) = label.address {
+                write!(write, "{module}.{}", Slice(name))?;
                 write!(write, " {address}")?;
             } else {
+                if name.contains(&b'.') {
+                    write!(write, "{}", Slice(name))?;
+                } else {
+                    write!(write, "{}.__ctor__", Slice(name))?;
+                }
                 write!(write, " None")?;
             }
             for link in label.links.iter() {

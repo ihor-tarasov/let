@@ -61,12 +61,12 @@ where
         }
     }
 
-    fn finish(&mut self) -> let_result::Result {
-        self.emiter.finish()
+    fn finish(&mut self, module: &str) -> let_result::Result {
+        self.emiter.finish(module)
     }
 }
 
-pub fn assemble<R, E>(mut read: R, emiter: E) -> let_result::Result
+pub fn assemble<R, E>(module: &str, mut read: R, emiter: E) -> let_result::Result
 where
     R: std::io::BufRead,
     E: let_emitter::Emitter,
@@ -76,7 +76,7 @@ where
     loop {
         line.clear();
         if read.read_line(&mut line)? == 0 {
-            break assembler.finish();
+            break assembler.finish(module);
         }
         assembler.assemble(line.as_str())?;
     }
