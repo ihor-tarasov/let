@@ -1,15 +1,12 @@
-struct Linker<W> {
-    write: W,
+struct Linker {
+    opcodes: Vec<u8>,
     resolver: let_resolver::Resolver,
 }
 
-impl<W> Linker<W>
-where
-    W: std::io::Write + std::io::Seek,
-{
-    fn new(write: W) -> Self {
+impl Linker {
+    fn new() -> Self {
         Self {
-            write,
+            opcodes: Vec::new(),
             resolver: let_resolver::Resolver::new(),
         }
     }
