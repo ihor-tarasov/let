@@ -1,6 +1,25 @@
+use std::io::SeekFrom;
+
 struct Linker {
     opcodes: Vec<u8>,
     resolver: let_resolver::Resolver,
+}
+
+fn read_file<R>(read: &mut R) -> let_result::Result<(Vec<u8>, String)>
+where
+    R: std::io::Read + std::io::Seek,
+{
+    let size_offset = read.seek(SeekFrom::End(-8))?;
+    let mut size = [0; 8];
+    read.read_exact(&mut size)?;
+    let size = u64::from_be_bytes(size);
+    read.seek(SeekFrom::Start(0))?;
+    let mut opcodes = vec![0u8; size as usize];
+    read.read_exact(&mut opcodes)?;
+    let meta_size = size_offset - read.stream_position()?;
+    let mut meta = vec![0u8; meta_size as usize];
+    read.read_exact(&mut meta)?;
+    Ok((opcodes, String::from_utf8(meta)?))
 }
 
 impl Linker {
@@ -11,26 +30,15 @@ impl Linker {
         }
     }
 
-    fn link<R, M>(
-        &mut self,
-        object_read: &mut R,
-        meta_read: &mut M,
-    ) -> let_result::Result
+    fn link<R>(&mut self, read: &mut R) -> let_result::Result
     where
-        R: std::io::Read,
-        M: std::io::BufRead,
+        R: std::io::Read + std::io::Seek,
     {
-        let offset = self.write.stream_position()?;
+        let size = self.opcodes.len();
+        let (opcodes, meta) = read_file(read)?;
 
-        let mut line = String::new();
-        loop {
-            line.clear();
-
-            if meta_read.read_line(&mut line)? == 0 {
-                break;
-            }
-
-            let mut tokens = line.trim().split_ascii_whitespace();
+        for line in meta.lines() {
+            let mut tokens = line.split(' ');
 
             let name = tokens.next().unwrap().trim();
             let address = tokens.next().unwrap().trim();
@@ -38,7 +46,7 @@ impl Linker {
             if address == "None" {
                 for token in tokens {
                     self.resolver
-                        .push_link_name(name.as_bytes(), token.parse::<u64>()? + offset);
+                        .push_link_name(name.as_bytes(), token.parse::<u64>()? + size as u64);
                 }
             } else {
                 if tokens.next().is_some() {
@@ -46,49 +54,46 @@ impl Linker {
                 }
 
                 self.resolver
-                    .push_label_name(name.as_bytes(), address.parse::<u64>()? + offset)?;
+                    .push_label_name(name.as_bytes(), address.parse::<u64>()? + size as u64)?;
             }
         }
 
-        loop {
-            let opcode = {
-                let mut buf = [0; 1];
-                match object_read.read_exact(&mut buf) {
-                    Ok(_) => buf[0],
-                    Err(error) => {
-                        if error.kind() == std::io::ErrorKind::UnexpectedEof {
-                            break;
-                        } else {
-                            return Err(error.into());
-                        }
-                    }
-                }
-            };
+        let mut offset = 0;
 
+        while offset < opcodes.len() {
+            let opcode = opcodes[offset];
+            offset += 1;
             match opcode {
-                0x00..=0x2F => self.write.write_all(&[opcode])?,
+                0x00..=0x2F => self.opcodes.push(opcode),
                 0x30..=0x4F => {
-                    let mut buf = [0; 1];
-                    object_read.read_exact(&mut buf)?;
-                    self.write.write_all(&[opcode, buf[0]])?;
+                    let b = opcodes.get(offset).unwrap().clone();
+                    offset += 1;
+                    self.opcodes.extend([opcode, b]);
                 }
                 0x50..=0x6F => {
-                    let mut buf = [0; 3];
-                    object_read.read_exact(&mut buf)?;
-                    self.write.write_all(&[opcode, buf[0], buf[1], buf[2]])?;
+                    let bytes = &opcodes[offset..(offset + 3)];
+                    offset += 3;
+                    if bytes.len() != 3 {
+                        panic!()
+                    }
+                    self.opcodes.push(opcode);
+                    self.opcodes.extend(bytes);
                 }
                 0x70..=0xFF => {
-                    let mut buf = [0; 8];
-                    object_read.read_exact(&mut buf)?;
-                    self.write.write_all(&[opcode])?;
+                    let mut bytes = [0; 8];
+                    for i in 0..8 {
+                        bytes[i] = opcodes.get(offset + i).unwrap().clone();
+                    }
+                    offset += 8;
+                    self.opcodes.push(opcode);
                     if opcode == let_opcodes::JPF
                         || opcode == let_opcodes::JP
                         || opcode == let_opcodes::PTR
                     {
-                        self.write
-                            .write_all(&(u64::from_be_bytes(buf) + offset).to_be_bytes())?;
+                        self.opcodes
+                            .extend(&(u64::from_be_bytes(bytes) + size as u64).to_be_bytes());
                     } else {
-                        self.write.write_all(&buf)?;
+                        self.opcodes.extend(bytes);
                     }
                 }
             };

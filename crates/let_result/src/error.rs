@@ -5,6 +5,7 @@ pub enum Error {
     ParseFloat(std::num::ParseFloatError),
     Custom(Box<String>),
     IO(std::io::Error),
+    FromUtf8(Box<std::string::FromUtf8Error>),
 }
 
 impl From<std::str::Utf8Error> for Error {
@@ -31,6 +32,12 @@ impl From<std::io::Error> for Error {
     }
 }
 
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(value: std::string::FromUtf8Error) -> Self {
+        Self::FromUtf8(Box::new(value))
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -39,6 +46,7 @@ impl std::fmt::Display for Error {
             Error::ParseFloat(error) => write!(f, "{error}"),
             Error::Custom(error) => write!(f, "{error}"),
             Error::IO(error) => write!(f, "{error}"),
+            Error::FromUtf8(error) => write!(f, "{error}"),
         }
     }
 }
