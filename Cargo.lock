@@ -80,5 +80,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "letr"
+version = "0.1.0"
+dependencies = [
+ "let_opcodes",
+ "let_result",
+]
+
+[[package]]
 name = "read_iter"
 version = "0.1.0"
