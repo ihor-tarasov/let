@@ -1,4 +1,4 @@
-use std::io::SeekFrom;
+use std::{fs::File, io::{SeekFrom, Write}, path::PathBuf};
 
 struct Linker {
     opcodes: Vec<u8>,
@@ -101,22 +101,56 @@ impl Linker {
 
         Ok(())
     }
-}
 
-fn link(path: &str) -> let_result::Result {
-    Ok(())
+    fn finish(&mut self) -> let_result::Result {
+        self.resolver.resolve(&mut self.opcodes)?;
+        let size = self.opcodes.len();
+        self.resolver.save_labels(None, &mut self.opcodes)?;
+        self.opcodes.extend((size as u64).to_be_bytes());
+        let mut path = PathBuf::new();
+        path.push("build");
+        if !path.exists() {
+            std::fs::create_dir(path.as_path())?;
+        }
+        path.push("linked");
+        path.set_extension("lbin");
+        match std::fs::File::create(path.as_path()) {
+            Ok(mut file) => file.write_all(&self.opcodes)?,
+            Err(error) => {
+                return let_result::raise!(
+                    "Unable to create file {:?}, error: {error}.",
+                    path.as_os_str()
+                )
+            }
+        }
+        Ok(())
+    }
 }
 
 fn main() -> std::process::ExitCode {
     println!("Let Linker");
+    let mut linker = Linker::new();
     for arg in std::env::args().skip(1) {
-        match link(&arg) {
-            Ok(_) => (),
+        match File::open(&arg) {
+            Ok(mut file) => match linker.link(&mut file) {
+                Ok(_) => (),
+                Err(error) => {
+                    eprintln!("{error}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            },
             Err(error) => {
                 eprintln!("{error}");
                 return std::process::ExitCode::FAILURE;
             }
         }
+    }
+    match linker.finish() {
+        Ok(_) => (),
+        Err(error) => {
+            eprintln!("{error}");
+            return std::process::ExitCode::FAILURE;
+        },
     }
     std::process::ExitCode::SUCCESS
 }

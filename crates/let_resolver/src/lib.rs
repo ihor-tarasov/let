@@ -133,13 +133,16 @@ impl Resolver {
         Ok(())
     }
 
-    pub fn save_labels<W>(&self, module: &str, write: &mut W) -> let_result::Result
+    pub fn save_labels<W>(&self, module: Option<&str>, write: &mut W) -> let_result::Result
     where
         W: std::io::Write,
     {
         for (name, label) in self.labels.iter() {
             if let Some(address) = label.address {
-                write!(write, "{module}.{}", Slice(name))?;
+                if let Some(module) = module {
+                    write!(write, "{module}.")?;
+                }
+                write!(write, "{}", Slice(name))?;
                 write!(write, " {address}")?;
             } else {
                 if name.contains(&b'.') {

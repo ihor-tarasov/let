@@ -153,7 +153,7 @@ impl let_emitter::Emitter for ObjectEmitter {
     fn finish(&mut self, module: &str) -> let_result::Result {
         self.resolver.resolve(&mut self.opcodes)?;
         let size = self.opcodes.len();
-        self.resolver.save_labels(module, &mut self.opcodes)?;
+        self.resolver.save_labels(Some(module), &mut self.opcodes)?;
         self.opcodes.extend((size as u64).to_be_bytes());
         let mut path = PathBuf::new();
         path.push("build");
