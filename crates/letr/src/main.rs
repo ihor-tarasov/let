@@ -213,7 +213,7 @@ where
                 }
                 match stack[sp - 1] {
                     Value::Boolean(value) => {
-                        if value {
+                        if !value {
                             pc = u64::from_be_bytes([
                                 opcodes.get(pc + 1).unwrap().clone(),
                                 opcodes.get(pc + 2).unwrap().clone(),
@@ -254,18 +254,28 @@ where
                 cp += 1;
                 *save_pc = pc + 2;
                 *save_locals = locals;
-                match stack[sp - 1] {
+                match stack[sp - params_count as usize - 1] {
                     Value::Address(address) => pc = address as usize,
                     _ => panic!("Unexpected type"),
                 }
-                sp -= 1;
                 locals = sp - params_count as usize;
             }
             let_opcodes::RET => {
                 if cp == 0 {
                     break;
                 }
+                if sp ==0 || sp >= stack.len() {
+                    panic!("Stack overflow");
+                }
+                let result = stack[sp - 1];
+                sp = locals - 1;
+                if sp >= stack.len() {
+                    panic!("Stack overflow");
+                }
+                stack[sp] = result;
+                sp += 1;
                 let (new_pc, new_locals) = calls.get(cp - 1).unwrap().clone();
+                cp -= 1;
                 pc = new_pc;
                 locals = new_locals;
             }
@@ -285,6 +295,7 @@ where
         }
     }
 
+    println!("{:?}", stack[0]);
     Ok(())
 }
 
