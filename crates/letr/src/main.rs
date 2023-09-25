@@ -25,13 +25,307 @@ enum Value {
     Address(u64),
 }
 
+struct State {
+    pc: usize,
+    stack: [Value; 256],
+    calls: [(usize, usize); 256],
+    cp: usize,
+    sp: usize,
+    locals: usize,
+    message: Option<String>,
+}
+
+#[derive(Debug)]
+enum VMError {
+    StackUnderflow,
+    StackOverflow,
+    FetchOpcodeError,
+    Custom,
+}
+
+type VMResult<T = ()> = Result<T, VMError>;
+
+impl State {
+    /// Pop one element from stack and forget them.
+    /// Raise error if stack is empty.
+    fn drop(&mut self) -> VMResult {
+        if self.sp == 0 {
+            Err(VMError::StackUnderflow)
+        } else {
+            self.sp -= 1;
+            Ok(())
+        }
+    }
+
+    /// Push value to stack.
+    fn push(&mut self, value: Value) -> VMResult {
+        if self.sp >= self.stack.len() {
+            Err(VMError::StackOverflow)
+        } else {
+            self.stack[self.sp] = value;
+            self.sp += 1;
+            Ok(())
+        }
+    }
+
+    /// Pop value from stack.
+    fn pop(&mut self) -> VMResult<Value> {
+        if self.sp == 0 {
+            Err(VMError::StackUnderflow)
+        } else if self.sp >= self.stack.len() {
+            Err(VMError::StackOverflow)
+        } else {
+            self.sp -= 1;
+            Ok(self.stack[self.sp])
+        }
+    }
+
+    /// Fetch next one byte from opcodes.
+    fn fetch(&self, opcodes: &[u8], offset: usize) -> VMResult<u8> {
+        if let Some(opcode) = opcodes.get(self.pc + offset).cloned() {
+            Ok(opcode)
+        } else {
+            Err(VMError::FetchOpcodeError)
+        }
+    }
+
+    fn error<T>(&mut self, m: String) -> VMResult<T> {
+        self.message = Some(m);
+        Err(VMError::Custom)
+    }
+
+    fn bin_ls(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l < r)),
+            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+        }
+    }
+
+    fn bin_le(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l <= r)),
+            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+        }
+    }
+
+    fn bin_gr(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l > r)),
+            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+        }
+    }
+
+    fn bin_eq(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l == r)),
+            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+        }
+    }
+
+    fn bin_add(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_add(r))),
+            _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
+        }
+    }
+
+    fn bin_sub(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_sub(r))),
+            _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
+        }
+    }
+
+    fn bin_mul(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        match (l, r) {
+            (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_mul(r))),
+            _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
+        }
+    }
+
+    /// Execute functor F as binary operator for this state.
+    fn binary<F>(&mut self, f: F) -> VMResult
+    where
+        F: Fn(&mut Self, Value, Value) -> VMResult<Value>,
+    {
+        if self.sp < 2 || self.sp > self.stack.len() {
+            return Err(VMError::StackOverflow);
+        }
+        self.sp -= 1;
+        self.stack[self.sp - 1] = f(self, self.stack[self.sp - 1], self.stack[self.sp])?;
+        Ok(())
+    }
+
+    fn op_drop(&mut self) -> VMResult<bool> {
+        self.drop()?; // Do main stuff.
+        self.pc += 1; // Skip one byte, Size of opcode = one byte.
+        Ok(true)
+    }
+
+    fn op_binary<F>(&mut self, f: F) -> VMResult<bool>
+    where
+        F: Fn(&mut Self, Value, Value) -> VMResult<Value>,
+    {
+        self.binary(f)?;
+        self.pc += 1;
+        Ok(true)
+    }
+
+    fn op_int1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        self.push(Value::Integer(self.fetch(opcodes, 1)? as i64))?;
+        self.pc += 2;
+        Ok(true)
+    }
+
+    fn op_ptr(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        self.push(Value::Address(u64::from_be_bytes([
+            self.fetch(opcodes, 1)?,
+            self.fetch(opcodes, 2)?,
+            self.fetch(opcodes, 3)?,
+            self.fetch(opcodes, 4)?,
+            self.fetch(opcodes, 5)?,
+            self.fetch(opcodes, 6)?,
+            self.fetch(opcodes, 7)?,
+            self.fetch(opcodes, 8)?,
+        ])))?;
+        self.pc += 9;
+        Ok(true)
+    }
+
+    fn op_jpf(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        let value = self.pop()?;
+        match value {
+            Value::Boolean(value) => {
+                if !value {
+                    self.pc = u64::from_be_bytes([
+                        self.fetch(opcodes, 1)?,
+                        self.fetch(opcodes, 2)?,
+                        self.fetch(opcodes, 3)?,
+                        self.fetch(opcodes, 4)?,
+                        self.fetch(opcodes, 5)?,
+                        self.fetch(opcodes, 6)?,
+                        self.fetch(opcodes, 7)?,
+                        self.fetch(opcodes, 8)?,
+                    ]) as usize;
+                    Ok(true)
+                } else {
+                    self.pc += 9;
+                    Ok(true)
+                }
+            }
+            _ => self.error(format!("Expected bool value, found {value:?}.")),
+        }
+    }
+
+    fn op_jp(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        self.pc = u64::from_be_bytes([
+            self.fetch(opcodes, 1)?,
+            self.fetch(opcodes, 2)?,
+            self.fetch(opcodes, 3)?,
+            self.fetch(opcodes, 4)?,
+            self.fetch(opcodes, 5)?,
+            self.fetch(opcodes, 6)?,
+            self.fetch(opcodes, 7)?,
+            self.fetch(opcodes, 8)?,
+        ]) as usize;
+        Ok(true)
+    }
+
+    fn op_call(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        let params_count = self.fetch(opcodes, 1)?;
+        if self.sp < params_count as usize + 1 {
+            return Err(VMError::StackUnderflow);
+        }
+        let (save_pc, save_locals) = match self.calls.get_mut(self.cp) {
+            Some(d) => d,
+            None => return Err(VMError::StackOverflow),
+        };
+        self.cp += 1;
+        *save_pc = self.pc + 2;
+        *save_locals = self.locals;
+        let address = self.stack[self.sp - params_count as usize - 1];
+        match address {
+            Value::Address(address) => self.pc = address as usize,
+            _ => return self.error(format!("Expected address, found {address:?}")),
+        }
+        self.locals = self.sp - params_count as usize;
+        Ok(true)
+    }
+
+    fn op_ret(&mut self) -> VMResult<bool> {
+        if self.cp == 0 {
+            return Ok(false);
+        }
+        let result = self.pop()?;
+        self.sp = self.locals - 1;
+        self.push(result)?;
+        let (new_pc, new_locals) = match self.calls.get(self.cp - 1) {
+            Some(d) => d.clone(),
+            None => return Err(VMError::StackOverflow),
+        };
+        self.cp -= 1;
+        self.pc = new_pc;
+        self.locals = new_locals;
+        Ok(true)
+    }
+
+    fn op_ld1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        let index = self.fetch(opcodes, 1)?;
+        if self.locals + index as usize >= self.stack.len() {
+            panic!("Stack overflow");
+        }
+        self.push(self.stack[self.locals + index as usize])?;
+        self.pc += 2;
+        Ok(true)
+    }
+
+    /// Executes one opcode.
+    /// Returns Ok(false) if VM is stopped.
+    fn step(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        let opcode = self.fetch(opcodes, 0)?;
+        match opcode {
+            let_opcodes::DROP => self.op_drop(),
+            let_opcodes::LS => self.op_binary(Self::bin_ls),
+            let_opcodes::GR => self.op_binary(Self::bin_gr),
+            let_opcodes::EQ => self.op_binary(Self::bin_eq),
+            let_opcodes::ADD => self.op_binary(Self::bin_add),
+            let_opcodes::LE => self.op_binary(Self::bin_le),
+            let_opcodes::SUB => self.op_binary(Self::bin_sub),
+            let_opcodes::MUL => self.op_binary(Self::bin_mul),
+            let_opcodes::INT1 => self.op_int1(opcodes),
+            let_opcodes::PTR => self.op_ptr(opcodes),
+            let_opcodes::JPF => self.op_jpf(opcodes),
+            let_opcodes::JP => self.op_jp(opcodes),
+            let_opcodes::CALL => self.op_call(opcodes),
+            let_opcodes::RET => self.op_ret(),
+            let_opcodes::LD1 => self.op_ld1(opcodes),
+            _ => self.error(format!("Unknown opcode 0x{opcode:02X}")),
+        }
+    }
+
+    fn run(&mut self, opcodes: &[u8]) -> VMResult<Value> {
+        while self.step(opcodes)? {
+
+        }
+        self.pop()
+    }
+}
+
 fn run<R>(read: &mut R) -> let_result::Result
 where
     R: std::io::Read + std::io::Seek,
 {
     let (opcodes, meta) = read_file(read)?;
 
-    let mut pc = 0;
+    let mut state = State {
+        pc: 0,
+        stack: [Value::Void; 256],
+        calls: [(0, 0); 256],
+        cp: 0,
+        sp: 0,
+        locals: 0,
+        message: None,
+    };
 
     for line in meta.lines() {
         let mut tokens = line.split(' ');
@@ -43,259 +337,14 @@ where
             let_result::raise!("Unknown symbol \"{name}\"")?;
         } else {
             if name.ends_with("__ctor__") {
-                pc = address.parse::<u64>()? as usize;
+                state.pc = address.parse::<u64>()? as usize;
             }
         }
     }
 
-    let mut stack = [Value::Void; 256];
-    let mut calls = [(0, 0); 256];
-    let mut cp = 0;
-    let mut sp = 0;
-    let mut locals = 0;
+    let result = state.run(&opcodes).unwrap();
 
-    loop {
-        let opcode = opcodes.get(pc).unwrap().clone();
-        match opcode {
-            let_opcodes::DROP => {
-                if sp == 0 {
-                    panic!("Stack underflow");
-                }
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::LS => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => Value::Boolean(left < right),
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::GR => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => Value::Boolean(left > right),
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::EQ => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => Value::Boolean(left == right),
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::ADD => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => {
-                        Value::Integer(left.wrapping_add(right))
-                    }
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::LE => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => Value::Boolean(left <= right),
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::SUB => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => {
-                        Value::Integer(left.wrapping_sub(right))
-                    }
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::MUL => {
-                if sp < 2 || sp > stack.len() {
-                    panic!("Stack overflow");
-                }
-                let left = stack[sp - 2];
-                let right = stack[sp - 1];
-
-                let result = match (left, right) {
-                    (Value::Integer(left), Value::Integer(right)) => {
-                        Value::Integer(left.wrapping_mul(right))
-                    }
-                    _ => panic!("Unsupported type"),
-                };
-
-                stack[sp - 2] = result;
-                sp -= 1;
-                pc += 1;
-            }
-            let_opcodes::INT1 => {
-                if sp >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                stack[sp] = Value::Integer(opcodes.get(pc + 1).unwrap().clone() as i64);
-                sp += 1;
-                pc += 2;
-            }
-            let_opcodes::PTR => {
-                if sp >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                stack[sp] = Value::Address(u64::from_be_bytes([
-                    opcodes.get(pc + 1).unwrap().clone(),
-                    opcodes.get(pc + 2).unwrap().clone(),
-                    opcodes.get(pc + 3).unwrap().clone(),
-                    opcodes.get(pc + 4).unwrap().clone(),
-                    opcodes.get(pc + 5).unwrap().clone(),
-                    opcodes.get(pc + 6).unwrap().clone(),
-                    opcodes.get(pc + 7).unwrap().clone(),
-                    opcodes.get(pc + 8).unwrap().clone(),
-                ]));
-                sp += 1;
-                pc += 9;
-            }
-            let_opcodes::JPF => {
-                if sp == 0 || sp >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                match stack[sp - 1] {
-                    Value::Boolean(value) => {
-                        if !value {
-                            pc = u64::from_be_bytes([
-                                opcodes.get(pc + 1).unwrap().clone(),
-                                opcodes.get(pc + 2).unwrap().clone(),
-                                opcodes.get(pc + 3).unwrap().clone(),
-                                opcodes.get(pc + 4).unwrap().clone(),
-                                opcodes.get(pc + 5).unwrap().clone(),
-                                opcodes.get(pc + 6).unwrap().clone(),
-                                opcodes.get(pc + 7).unwrap().clone(),
-                                opcodes.get(pc + 8).unwrap().clone(),
-                            ]) as usize;
-                        } else {
-                            pc += 9;
-                        }
-                    }
-                    _ => panic!("Unexpected type"),
-                }
-
-                sp -= 1;
-            }
-            let_opcodes::JP => {
-                pc = u64::from_be_bytes([
-                    opcodes.get(pc + 1).unwrap().clone(),
-                    opcodes.get(pc + 2).unwrap().clone(),
-                    opcodes.get(pc + 3).unwrap().clone(),
-                    opcodes.get(pc + 4).unwrap().clone(),
-                    opcodes.get(pc + 5).unwrap().clone(),
-                    opcodes.get(pc + 6).unwrap().clone(),
-                    opcodes.get(pc + 7).unwrap().clone(),
-                    opcodes.get(pc + 8).unwrap().clone(),
-                ]) as usize;
-            }
-            let_opcodes::CALL => {
-                let params_count = opcodes.get(pc + 1).unwrap().clone();
-                if sp < params_count as usize + 1 {
-                    panic!("Stack underflow")
-                }
-                let (save_pc, save_locals) = calls.get_mut(cp).unwrap();
-                cp += 1;
-                *save_pc = pc + 2;
-                *save_locals = locals;
-                match stack[sp - params_count as usize - 1] {
-                    Value::Address(address) => pc = address as usize,
-                    _ => panic!("Unexpected type"),
-                }
-                locals = sp - params_count as usize;
-            }
-            let_opcodes::RET => {
-                if cp == 0 {
-                    break;
-                }
-                if sp ==0 || sp >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                let result = stack[sp - 1];
-                sp = locals - 1;
-                if sp >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                stack[sp] = result;
-                sp += 1;
-                let (new_pc, new_locals) = calls.get(cp - 1).unwrap().clone();
-                cp -= 1;
-                pc = new_pc;
-                locals = new_locals;
-            }
-            let_opcodes::LD1 => {
-                if sp >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                let index = opcodes.get(pc + 1).unwrap().clone() as usize;
-                if locals + index >= stack.len() {
-                    panic!("Stack overflow");
-                }
-                stack[sp] = stack[locals + index];
-                sp += 1;
-                pc += 2;
-            }
-            _ => panic!("Unknown opcode 0x{opcode:02X}"),
-        }
-    }
-
-    println!("{:?}", stack[0]);
+    println!("{:?}", result);
     Ok(())
 }
 
