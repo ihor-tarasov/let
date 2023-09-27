@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::info::Info;
+use crate::utils::{self, Info};
 
 pub struct Index(HashMap<u64, Info>);
 
@@ -44,20 +44,6 @@ impl Index {
     }
 
     pub fn resolve(&self, opcodes: &mut [u8]) -> let_result::Result {
-        for label in self.0.values() {
-            if let Some(address) = label.address {
-                for link in label.links.iter().cloned() {
-                    address
-                        .to_be_bytes()
-                        .iter()
-                        .cloned()
-                        .enumerate()
-                        .for_each(|(i, b)| {
-                            opcodes[link as usize + i] = b;
-                        });
-                }
-            }
-        }
-        Ok(())
+        utils::resolve(self.0.values(), opcodes)
     }
 }

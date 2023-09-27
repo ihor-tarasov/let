@@ -1,5 +1,5 @@
 mod index;
-mod info;
+mod utils;
 mod name;
 
 pub use name::*;
