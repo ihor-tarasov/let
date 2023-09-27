@@ -11,6 +11,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "let_assembly_emitter"
+version = "0.1.0"
+dependencies = [
+ "let_emitter",
+ "let_result",
+]
+
+[[package]]
 name = "let_emitter"
 version = "0.1.0"
 dependencies = [
@@ -63,6 +71,7 @@ dependencies = [
 name = "letc"
 version = "0.1.0"
 dependencies = [
+ "let_assembly_emitter",
  "let_emitter",
  "let_object_emitter",
  "let_parser",

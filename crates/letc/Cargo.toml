@@ -8,4 +8,5 @@ read_iter = { version = "0.1.0", path = "../read_iter" }
 let_result = { version = "0.1.0", path = "../let_result" }
 let_emitter = { version = "0.1.0", path = "../let_emitter" }
 let_object_emitter = { version = "0.1.0", path = "../let_object_emitter" }
+let_assembly_emitter = { version = "0.1.0", path = "../let_assembly_emitter" }
 let_parser = { version = "0.1.0", path = "../let_parser" }

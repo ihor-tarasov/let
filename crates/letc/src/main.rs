@@ -2,7 +2,6 @@ use std::fmt::Write;
 use std::io::Seek;
 use std::path::Path;
 
-mod assembly_emiter;
 mod line;
 
 fn parse<R, E>(path: &str, file: R, emitter: E) -> let_result::Result
@@ -35,7 +34,7 @@ fn compile(path: &str, compile_assembly: bool) -> let_result::Result {
     match std::fs::File::open(path) {
         Ok(file) => {
             if compile_assembly {
-                parse(path, file, assembly_emiter::open(path)?)?;
+                parse(path, file, let_assembly_emitter::open(path)?)?;
             } else {
                 parse(path, file, let_object_emitter::ObjectEmitter::new())?;
             }
