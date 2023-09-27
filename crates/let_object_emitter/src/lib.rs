@@ -17,14 +17,16 @@ impl<'a> fmt::Display for Slice<'a> {
 
 pub struct ObjectEmitter {
     opcodes: Vec<u8>,
-    resolver: let_resolver::Resolver,
+    names: let_resolver::Name,
+    indexes: let_resolver::Index,
 }
 
 impl ObjectEmitter {
     pub fn new() -> Self {
         Self {
             opcodes: Vec::new(),
-            resolver: let_resolver::Resolver::new(),
+            names: let_resolver::Name::new(),
+            indexes: let_resolver::Index::new(),
         }
     }
 }
@@ -79,43 +81,39 @@ impl let_emitter::Emitter for ObjectEmitter {
     }
 
     fn label(&mut self, id: u64) -> let_emitter::Result {
-        self.resolver
-            .push_label_index(id, self.opcodes.len() as u64)?;
+        self.indexes.label(id, self.opcodes.len() as u64)?;
         Ok(())
     }
 
     fn label_named(&mut self, name: &[u8]) -> let_emitter::Result {
-        self.resolver
-            .push_label_name(name, self.opcodes.len() as u64)?;
+        self.names.label(name, self.opcodes.len() as u64)?;
         Ok(())
     }
 
     fn jump(&mut self, id: u64) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JP]);
-        self.resolver.push_link_index(id, self.opcodes.len() as u64);
+        self.indexes.link(id, self.opcodes.len() as u64);
         self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
         Ok(())
     }
 
     fn jump_name(&mut self, name: &[u8]) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JP]);
-        self.resolver
-            .push_link_name(name, self.opcodes.len() as u64);
+        self.names.link(name, self.opcodes.len() as u64);
         self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
         Ok(())
     }
 
     fn jump_false(&mut self, id: u64) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JPF]);
-        self.resolver.push_link_index(id, self.opcodes.len() as u64);
+        self.indexes.link(id, self.opcodes.len() as u64);
         self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
         Ok(())
     }
 
     fn jump_false_name(&mut self, name: &[u8]) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JPF]);
-        self.resolver
-            .push_link_name(name, self.opcodes.len() as u64);
+        self.names.link(name, self.opcodes.len() as u64);
         self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
         Ok(())
     }
@@ -139,8 +137,7 @@ impl let_emitter::Emitter for ObjectEmitter {
 
     fn pointer(&mut self, name: &[u8]) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::PTR]);
-        self.resolver
-            .push_link_name(name, self.opcodes.len() as u64);
+        self.names.link(name, self.opcodes.len() as u64);
         self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
         Ok(())
     }
@@ -151,9 +148,10 @@ impl let_emitter::Emitter for ObjectEmitter {
     }
 
     fn finish(&mut self, module: &str) -> let_result::Result {
-        self.resolver.resolve(&mut self.opcodes)?;
+        self.indexes.resolve(&mut self.opcodes)?;
+        self.names.resolve(&mut self.opcodes)?;
         let size = self.opcodes.len();
-        self.resolver.save_labels(Some(module), &mut self.opcodes)?;
+        self.names.save(Some(module), &mut self.opcodes)?;
         self.opcodes.extend((size as u64).to_be_bytes());
         let mut path = PathBuf::new();
         path.push("build");

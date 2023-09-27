@@ -1,8 +1,12 @@
-use std::{fs::File, io::{SeekFrom, Write}, path::PathBuf};
+use std::{
+    fs::File,
+    io::{SeekFrom, Write},
+    path::PathBuf,
+};
 
 struct Linker {
     opcodes: Vec<u8>,
-    resolver: let_resolver::Resolver,
+    resolver: let_resolver::Name,
 }
 
 fn read_file<R>(read: &mut R) -> let_result::Result<(Vec<u8>, String)>
@@ -26,7 +30,7 @@ impl Linker {
     fn new() -> Self {
         Self {
             opcodes: Vec::new(),
-            resolver: let_resolver::Resolver::new(),
+            resolver: let_resolver::Name::new(),
         }
     }
 
@@ -46,7 +50,7 @@ impl Linker {
             if address == "None" {
                 for token in tokens {
                     self.resolver
-                        .push_link_name(name.as_bytes(), token.parse::<u64>()? + size as u64);
+                        .link(name.as_bytes(), token.parse::<u64>()? + size as u64);
                 }
             } else {
                 if tokens.next().is_some() {
@@ -54,7 +58,7 @@ impl Linker {
                 }
 
                 self.resolver
-                    .push_label_name(name.as_bytes(), address.parse::<u64>()? + size as u64)?;
+                    .label(name.as_bytes(), address.parse::<u64>()? + size as u64)?;
             }
         }
 
@@ -105,7 +109,7 @@ impl Linker {
     fn finish(&mut self) -> let_result::Result {
         self.resolver.resolve(&mut self.opcodes)?;
         let size = self.opcodes.len();
-        self.resolver.save_labels(None, &mut self.opcodes)?;
+        self.resolver.save(None, &mut self.opcodes)?;
         self.opcodes.extend((size as u64).to_be_bytes());
         let mut path = PathBuf::new();
         path.push("build");
@@ -150,7 +154,7 @@ fn main() -> std::process::ExitCode {
         Err(error) => {
             eprintln!("{error}");
             return std::process::ExitCode::FAILURE;
-        },
+        }
     }
     std::process::ExitCode::SUCCESS
 }
