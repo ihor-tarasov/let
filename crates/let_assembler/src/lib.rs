@@ -1,12 +1,12 @@
-struct Assembler<E> {
-    emiter: E,
+struct Assembler<'a, E> {
+    emiter: &'a mut E,
 }
 
-impl<E> Assembler<E>
+impl<'a, E> Assembler<'a, E>
 where
     E: let_emitter::Emitter,
 {
-    fn new(emiter: E) -> Self {
+    fn new(emiter: &'a mut E) -> Self {
         Self { emiter }
     }
 
@@ -60,13 +60,9 @@ where
             let_result::raise!("UnexpeEted line \"{}\"", line)
         }
     }
-
-    fn finish(&mut self, module: &str) -> let_result::Result {
-        self.emiter.finish(module)
-    }
 }
 
-pub fn assemble<R, E>(module: &str, mut read: R, emiter: E) -> let_result::Result
+pub fn assemble<R, E>(mut read: R, emiter: &mut E) -> let_result::Result
 where
     R: std::io::BufRead,
     E: let_emitter::Emitter,
@@ -76,7 +72,7 @@ where
     loop {
         line.clear();
         if read.read_line(&mut line)? == 0 {
-            break assembler.finish(module);
+            break Ok(());
         }
         assembler.assemble(line.as_str())?;
     }

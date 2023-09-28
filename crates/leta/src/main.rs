@@ -5,11 +5,12 @@ fn assemble(path: &str) -> let_result::Result {
     let module = Path::new(path).file_stem().unwrap().to_str().unwrap();
     match std::fs::File::open(path) {
         Ok(file) => {
+            let mut emitter = let_object_emitter::ObjectEmitter::new();
             let_assembler::assemble(
-                module,
                 std::io::BufReader::new(file),
-                let_object_emitter::ObjectEmitter::new(),
+                &mut emitter,
             )?;
+            emitter.finish(module)?;
             println!(
                 "Assembled \"{path}\", time: {} seconds",
                 (std::time::Instant::now() - start).as_secs_f64()

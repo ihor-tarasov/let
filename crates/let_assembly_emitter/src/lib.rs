@@ -91,10 +91,6 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         writeln!(self.0, "\tRET")?;
         Ok(())
     }
-
-    fn finish(&mut self, _module: &str) -> let_result::Result {
-        Ok(())
-    }
 }
 
 pub fn open(path: &str) -> let_result::Result<impl let_emitter::Emitter> {

@@ -15,5 +15,4 @@ pub trait Emitter {
     fn jump_name(&mut self, name: &[u8]) -> let_result::Result;
     fn jump_false(&mut self, id: u64) -> let_result::Result;
     fn jump_false_name(&mut self, name: &[u8]) -> let_result::Result;
-    fn finish(&mut self, module: &str) -> let_result::Result;
 }

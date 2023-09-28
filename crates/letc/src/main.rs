@@ -4,15 +4,14 @@ use std::path::Path;
 
 mod line;
 
-fn parse<R, E>(path: &str, file: R, emitter: E) -> let_result::Result
+fn parse<R, E>(path: &str, file: R, emitter: &mut E) -> let_result::Result
 where
     R: std::io::Read + std::io::Seek,
     E: let_emitter::Emitter,
 {
     let mut iter = read_iter::ReadIter::new(file, 1024);
     let mut parser = let_parser::Parser::new(&mut iter, emitter);
-    let module = Path::new(path).file_stem().unwrap().to_str().unwrap();
-    if let Err(error) = parser.parse(module) {
+    if let Err(error) = parser.parse() {
         let range = parser.range();
         iter.seek(std::io::SeekFrom::Start(0))?;
         let info = line::create(&mut iter, range.start);
@@ -34,9 +33,12 @@ fn compile(path: &str, compile_assembly: bool) -> let_result::Result {
     match std::fs::File::open(path) {
         Ok(file) => {
             if compile_assembly {
-                parse(path, file, let_assembly_emitter::open(path)?)?;
+                parse(path, file, &mut let_assembly_emitter::open(path)?)?;
             } else {
-                parse(path, file, let_object_emitter::ObjectEmitter::new())?;
+                let mut emitter = let_object_emitter::ObjectEmitter::new();
+                parse(path, file, &mut emitter)?;
+                let module = Path::new(path).file_stem().unwrap().to_str().unwrap();
+                emitter.finish(module)?;
             }
             println!(
                 "Compiled \"{path}\", time: {} seconds",

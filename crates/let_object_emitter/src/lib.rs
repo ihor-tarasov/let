@@ -29,6 +29,31 @@ impl ObjectEmitter {
             indexes: let_resolver::Index::new(),
         }
     }
+
+    pub fn finish(&mut self, module: &str) -> let_result::Result {
+        self.indexes.resolve(&mut self.opcodes)?;
+        self.names.resolve(&mut self.opcodes)?;
+        let size = self.opcodes.len();
+        self.names.save(Some(module), &mut self.opcodes)?;
+        self.opcodes.extend((size as u64).to_be_bytes());
+        let mut path = PathBuf::new();
+        path.push("build");
+        if !path.exists() {
+            std::fs::create_dir(path.as_path())?;
+        }
+        path.push(module);
+        path.set_extension("lbin");
+        match std::fs::File::create(path.as_path()) {
+            Ok(mut file) => file.write_all(&self.opcodes)?,
+            Err(error) => {
+                return let_result::raise!(
+                    "Unable to create file {:?}, error: {error}.",
+                    path.as_os_str()
+                )
+            }
+        }
+        Ok(())
+    }
 }
 
 impl let_emitter::Emitter for ObjectEmitter {
@@ -144,31 +169,6 @@ impl let_emitter::Emitter for ObjectEmitter {
 
     fn ret(&mut self) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::RET]);
-        Ok(())
-    }
-
-    fn finish(&mut self, module: &str) -> let_result::Result {
-        self.indexes.resolve(&mut self.opcodes)?;
-        self.names.resolve(&mut self.opcodes)?;
-        let size = self.opcodes.len();
-        self.names.save(Some(module), &mut self.opcodes)?;
-        self.opcodes.extend((size as u64).to_be_bytes());
-        let mut path = PathBuf::new();
-        path.push("build");
-        if !path.exists() {
-            std::fs::create_dir(path.as_path())?;
-        }
-        path.push(module);
-        path.set_extension("lbin");
-        match std::fs::File::create(path.as_path()) {
-            Ok(mut file) => file.write_all(&self.opcodes)?,
-            Err(error) => {
-                return let_result::raise!(
-                    "Unable to create file {:?}, error: {error}.",
-                    path.as_os_str()
-                )
-            }
-        }
         Ok(())
     }
 }
