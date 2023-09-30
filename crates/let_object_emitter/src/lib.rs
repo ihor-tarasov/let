@@ -54,7 +54,7 @@ impl ObjectEmitter {
         path.push(module_name);
         path.set_extension("lbin");
         match std::fs::File::create(path.as_path()) {
-            Ok(mut file) => module.write(&mut file)?,
+            Ok(mut file) => module.write_prefixed(module_name.as_bytes(), &mut file)?,
             Err(error) => {
                 return let_result::raise!(
                     "Unable to create file {:?}, error: {error}.",
@@ -71,11 +71,8 @@ impl let_emitter::Emitter for ObjectEmitter {
         if value <= u8::MAX as u64 {
             self.opcodes.extend(&[let_opcodes::INT1, value as u8]);
         } else if value <= 0xFFFF {
-            self.opcodes.extend(&[
-                let_opcodes::INT2,
-                (value >> 8) as u8,
-                value as u8,
-            ]);
+            self.opcodes
+                .extend(&[let_opcodes::INT2, (value >> 8) as u8, value as u8]);
         } else {
             self.opcodes.extend(&[let_opcodes::INT8]);
             self.opcodes.extend(&value.to_be_bytes());
@@ -156,11 +153,8 @@ impl let_emitter::Emitter for ObjectEmitter {
         if index <= u8::MAX as u32 {
             self.opcodes.extend(&[let_opcodes::LD1, index as u8]);
         } else if index <= 0xFFFFFF {
-            self.opcodes.extend(&[
-                let_opcodes::LD2,
-                (index >> 8) as u8,
-                index as u8,
-            ]);
+            self.opcodes
+                .extend(&[let_opcodes::LD2, (index >> 8) as u8, index as u8]);
         } else {
             self.opcodes.extend(&[let_opcodes::INT8]);
             self.opcodes.extend(&index.to_be_bytes());

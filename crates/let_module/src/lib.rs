@@ -5,10 +5,6 @@ use std::{
     io::{Read, Write},
 };
 
-use reader::Reader;
-
-use crate::writer::Writer;
-
 #[derive(Hash, PartialEq, Eq)]
 struct U8Str<'a>(&'a [u8]);
 
@@ -23,8 +19,7 @@ impl<'a> fmt::Display for U8Str<'a> {
     }
 }
 
-mod reader;
-mod writer;
+mod utils;
 
 fn resolve<T>(
     links: &mut HashMap<T, Vec<u32>>,
@@ -75,14 +70,43 @@ impl NamedLabels {
     where
         W: Write,
     {
-        self.0.write(write)
+        debug_assert!(self.0.len() <= u32::MAX as usize);
+        utils::write_u32(write, self.0.len() as u32)?;
+        for (k, v) in self.0.iter() {
+            utils::write_label(write, k)?;
+            utils::write_u32(write, *v)?;
+        }
+        Ok(())
+    }
+
+    pub fn write_prefixed<W>(&self, prefix: &[u8], write: &mut W) -> let_result::Result
+    where
+        W: Write,
+    {
+        debug_assert!(self.0.len() <= u32::MAX as usize);
+        utils::write_u32(write, self.0.len() as u32)?;
+        for (k, v) in self.0.iter() {
+            utils::write_labels(write, prefix, k)?;
+            utils::write_u32(write, *v)?;
+        }
+        Ok(())
     }
 
     pub fn read<R>(read: &mut R) -> let_result::Result<Self>
     where
         R: Read,
     {
-        Ok(Self(HashMap::<Box<[u8]>, u32>::read(read)?))
+        let len = utils::read_u32(read)?;
+        let mut result = HashMap::with_capacity(len as usize);
+        for _ in 0..len {
+            let name = utils::read_label(read)?;
+            if result.contains_key(&name) {
+                return let_result::raise!("labels conflict.");
+            }
+            let address = utils::read_u32(read)?;
+            result.insert(name, address);
+        }
+        Ok(Self(result))
     }
 
     pub fn merge(&mut self, other: Self) -> let_result::Result {
@@ -125,14 +149,30 @@ impl NamedLinks {
     where
         W: Write,
     {
-        self.0.write(write)
+        debug_assert!(self.0.len() <= u32::MAX as usize);
+        utils::write_u32(write, self.0.len() as u32)?;
+        for (k, v) in self.0.iter() {
+            utils::write_label(write, k)?;
+            utils::write_u32_slice(write, v)?;
+        }
+        Ok(())
     }
 
     pub fn read<R>(read: &mut R) -> let_result::Result<Self>
     where
         R: Read,
     {
-        Ok(Self(HashMap::<Box<[u8]>, Vec<u32>>::read(read)?))
+        let len = utils::read_u32(read)?;
+        let mut result = HashMap::with_capacity(len as usize);
+        for _ in 0..len {
+            let name = utils::read_label(read)?;
+            if result.contains_key(&name) {
+                return let_result::raise!("labels conflict.");
+            }
+            let links = utils::read_u32_vec(read)?;
+            result.insert(name, links);
+        }
+        Ok(Self(result))
     }
 
     pub fn merge(&mut self, other: Self) {
@@ -199,8 +239,19 @@ impl Module {
         W: std::io::Write,
     {
         write.write_all(&[b'L', b'E', b'T', 38])?;
-        self.opcodes.write(write)?;
+        utils::write_u8_slice(write, &self.opcodes)?;
         self.labels.write(write)?;
+        self.links.write(write)?;
+        Ok(())
+    }
+
+    pub fn write_prefixed<W>(&self, prefix: &[u8], write: &mut W) -> let_result::Result
+    where
+        W: std::io::Write,
+    {
+        write.write_all(&[b'L', b'E', b'T', 38])?;
+        utils::write_u8_slice(write, &self.opcodes)?;
+        self.labels.write_prefixed(prefix, write)?;
         self.links.write(write)?;
         Ok(())
     }
@@ -214,7 +265,7 @@ impl Module {
         if magic != [b'L', b'E', b'T', 38] {
             return let_result::raise!("Unknown format.");
         }
-        let opcodes = Vec::<u8>::read(read)?;
+        let opcodes = utils::read_u8_vec(read)?;
         let labels = NamedLabels::read(read)?;
         let links = NamedLinks::read(read)?;
 
