@@ -109,14 +109,16 @@ impl NamedLabels {
         Ok(Self(result))
     }
 
-    pub fn merge(&mut self, other: Self) -> let_result::Result {
-        for name in other.0.keys() {
-            if self.0.contains_key(name) {
-                return let_result::raise!("Duplicate label \"{}\".", U8Str(name));
+    pub fn merge(&mut self, other: Self, offset: u32) -> let_result::Result {
+        self.0.reserve(other.0.len());
+
+        for (name, address) in other.0 {
+            if self.0.contains_key(&name) {
+                return let_result::raise!("Duplicate label \"{}\".", U8Str(&name));
             }
+            self.0.insert(name, address + offset);
         }
 
-        self.0.extend(other.0);
         Ok(())
     }
 
@@ -234,29 +236,29 @@ impl Module {
         self.links.resolve(&self.labels, &mut self.opcodes)
     }
 
-    pub fn write<W>(&self, write: &mut W) -> let_result::Result
+    pub fn write<W>(&self, mut write: W) -> let_result::Result
     where
         W: std::io::Write,
     {
         write.write_all(&[b'L', b'E', b'T', 38])?;
-        utils::write_u8_slice(write, &self.opcodes)?;
-        self.labels.write(write)?;
-        self.links.write(write)?;
+        utils::write_u8_slice(&mut write, &self.opcodes)?;
+        self.labels.write(&mut write)?;
+        self.links.write(&mut write)?;
         Ok(())
     }
 
-    pub fn write_prefixed<W>(&self, prefix: &[u8], write: &mut W) -> let_result::Result
+    pub fn write_prefixed<W>(&self, prefix: &[u8], mut write: W) -> let_result::Result
     where
         W: std::io::Write,
     {
         write.write_all(&[b'L', b'E', b'T', 38])?;
-        utils::write_u8_slice(write, &self.opcodes)?;
-        self.labels.write_prefixed(prefix, write)?;
-        self.links.write(write)?;
+        utils::write_u8_slice(&mut write, &self.opcodes)?;
+        self.labels.write_prefixed(prefix, &mut write)?;
+        self.links.write(&mut write)?;
         Ok(())
     }
 
-    pub fn read<R>(read: &mut R) -> let_result::Result<Self>
+    pub fn read<R>(mut read: R) -> let_result::Result<Self>
     where
         R: std::io::Read,
     {
@@ -265,9 +267,9 @@ impl Module {
         if magic != [b'L', b'E', b'T', 38] {
             return let_result::raise!("Unknown format.");
         }
-        let opcodes = utils::read_u8_vec(read)?;
-        let labels = NamedLabels::read(read)?;
-        let links = NamedLinks::read(read)?;
+        let opcodes = utils::read_u8_vec(&mut read)?;
+        let labels = NamedLabels::read(&mut read)?;
+        let links = NamedLinks::read(&mut read)?;
 
         Ok(Self {
             opcodes,
@@ -281,7 +283,7 @@ impl Module {
             return let_result::raise!("Program to big");
         }
 
-        let offset = self.opcodes.len();
+        let offset = self.opcodes.len() as u32;
         self.opcodes.reserve(other.opcodes.len());
         let mut i = 0;
         while i < other.opcodes.len() {
@@ -314,7 +316,7 @@ impl Module {
                         || opcode == let_opcodes::PTR
                     {
                         self.opcodes
-                            .extend(&(u32::from_be_bytes(bytes) + offset as u32).to_be_bytes());
+                            .extend(&(u32::from_be_bytes(bytes) + offset).to_be_bytes());
                     } else {
                         self.opcodes.extend(bytes);
                     }
@@ -330,8 +332,10 @@ impl Module {
             };
         }
 
-        self.labels.merge(other.labels)?;
+        self.labels.merge(other.labels, offset)?;
         self.links.merge(other.links);
+
+        self.resolve()?;
 
         Ok(())
     }

@@ -40,7 +40,6 @@ dependencies = [
  "let_emitter",
  "let_module",
  "let_opcodes",
- "let_resolver",
  "let_result",
 ]
 
@@ -53,13 +52,6 @@ name = "let_parser"
 version = "0.1.0"
 dependencies = [
  "let_emitter",
- "let_result",
-]
-
-[[package]]
-name = "let_resolver"
-version = "0.1.0"
-dependencies = [
  "let_result",
 ]
 
@@ -92,8 +84,8 @@ dependencies = [
 name = "letl"
 version = "0.1.0"
 dependencies = [
+ "let_module",
  "let_opcodes",
- "let_resolver",
  "let_result",
 ]
 
