@@ -87,7 +87,7 @@ impl NamedLabels {
         utils::write_u32(write, self.0.len() as u32)?;
         for (name, v) in self.0.iter() {
             if name.as_ref() == b"__ctor__" {
-                utils::write_label(write, name)?;
+                utils::write_label(write, prefix)?;
             } else {
                 utils::write_labels(write, prefix, name)?;
             }
