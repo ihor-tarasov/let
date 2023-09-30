@@ -47,7 +47,7 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         Ok(())
     }
 
-    fn label(&mut self, id: u64) -> let_emitter::Result {
+    fn label(&mut self, id: u32) -> let_emitter::Result {
         writeln!(self.0, "@lbl_{id}:")?;
         Ok(())
     }
@@ -57,7 +57,7 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         Ok(())
     }
 
-    fn jump(&mut self, id: u64) -> let_emitter::Result {
+    fn jump(&mut self, id: u32) -> let_emitter::Result {
         writeln!(self.0, "\tJP @lbl_{id}")?;
         Ok(())
     }
@@ -67,7 +67,7 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         Ok(())
     }
 
-    fn jump_false(&mut self, id: u64) -> let_emitter::Result {
+    fn jump_false(&mut self, id: u32) -> let_emitter::Result {
         writeln!(self.0, "\tJPF @lbl_{id}")?;
         Ok(())
     }
@@ -77,7 +77,7 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
         Ok(())
     }
 
-    fn load(&mut self, index: u64) -> let_emitter::Result {
+    fn load(&mut self, index: u32) -> let_emitter::Result {
         writeln!(self.0, "\tLD {}", index)?;
         Ok(())
     }

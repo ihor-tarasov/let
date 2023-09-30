@@ -1,37 +1,20 @@
-use std::{fs::File, io::SeekFrom};
-
-fn read_file<R>(read: &mut R) -> let_result::Result<(Vec<u8>, String)>
-where
-    R: std::io::Read + std::io::Seek,
-{
-    let size_offset = read.seek(SeekFrom::End(-8))?;
-    let mut size = [0; 8];
-    read.read_exact(&mut size)?;
-    let size = u64::from_be_bytes(size);
-    read.seek(SeekFrom::Start(0))?;
-    let mut opcodes = vec![0u8; size as usize];
-    read.read_exact(&mut opcodes)?;
-    let meta_size = size_offset - read.stream_position()?;
-    let mut meta = vec![0u8; meta_size as usize];
-    read.read_exact(&mut meta)?;
-    Ok((opcodes, String::from_utf8(meta)?))
-}
+use std::fs::File;
 
 #[derive(Debug, Clone, Copy)]
 enum Value {
     Void,
     Boolean(bool),
     Integer(i64),
-    Address(u64),
+    Address(u32),
 }
 
 struct State {
-    pc: usize,
+    pc: u32,
     stack: [Value; 256],
-    calls: [(usize, usize); 256],
-    cp: usize,
-    sp: usize,
-    locals: usize,
+    calls: [(u32, u32); 256],
+    cp: u32,
+    sp: u32,
+    locals: u32,
     message: Option<String>,
 }
 
@@ -59,10 +42,10 @@ impl State {
 
     /// Push value to stack.
     fn push(&mut self, value: Value) -> VMResult {
-        if self.sp >= self.stack.len() {
+        if self.sp >= self.stack.len() as u32 {
             Err(VMError::StackOverflow)
         } else {
-            self.stack[self.sp] = value;
+            self.stack[self.sp as usize] = value;
             self.sp += 1;
             Ok(())
         }
@@ -72,17 +55,17 @@ impl State {
     fn pop(&mut self) -> VMResult<Value> {
         if self.sp == 0 {
             Err(VMError::StackUnderflow)
-        } else if self.sp >= self.stack.len() {
+        } else if self.sp >= self.stack.len() as u32 {
             Err(VMError::StackOverflow)
         } else {
             self.sp -= 1;
-            Ok(self.stack[self.sp])
+            Ok(self.stack[self.sp as usize])
         }
     }
 
     /// Fetch next one byte from opcodes.
-    fn fetch(&self, opcodes: &[u8], offset: usize) -> VMResult<u8> {
-        if let Some(opcode) = opcodes.get(self.pc + offset).cloned() {
+    fn fetch(&self, opcodes: &[u8], offset: u32) -> VMResult<u8> {
+        if let Some(opcode) = opcodes.get((self.pc + offset) as usize).cloned() {
             Ok(opcode)
         } else {
             Err(VMError::FetchOpcodeError)
@@ -148,11 +131,15 @@ impl State {
     where
         F: Fn(&mut Self, Value, Value) -> VMResult<Value>,
     {
-        if self.sp < 2 || self.sp > self.stack.len() {
+        if self.sp < 2 || self.sp > self.stack.len() as u32 {
             return Err(VMError::StackOverflow);
         }
         self.sp -= 1;
-        self.stack[self.sp - 1] = f(self, self.stack[self.sp - 1], self.stack[self.sp])?;
+        self.stack[(self.sp - 1) as usize] = f(
+            self,
+            self.stack[(self.sp - 1) as usize],
+            self.stack[(self.sp) as usize],
+        )?;
         Ok(())
     }
 
@@ -178,17 +165,13 @@ impl State {
     }
 
     fn op_ptr(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        self.push(Value::Address(u64::from_be_bytes([
+        self.push(Value::Address(u32::from_be_bytes([
             self.fetch(opcodes, 1)?,
             self.fetch(opcodes, 2)?,
             self.fetch(opcodes, 3)?,
             self.fetch(opcodes, 4)?,
-            self.fetch(opcodes, 5)?,
-            self.fetch(opcodes, 6)?,
-            self.fetch(opcodes, 7)?,
-            self.fetch(opcodes, 8)?,
         ])))?;
-        self.pc += 9;
+        self.pc += 5;
         Ok(true)
     }
 
@@ -197,19 +180,15 @@ impl State {
         match value {
             Value::Boolean(value) => {
                 if !value {
-                    self.pc = u64::from_be_bytes([
+                    self.pc = u32::from_be_bytes([
                         self.fetch(opcodes, 1)?,
                         self.fetch(opcodes, 2)?,
                         self.fetch(opcodes, 3)?,
                         self.fetch(opcodes, 4)?,
-                        self.fetch(opcodes, 5)?,
-                        self.fetch(opcodes, 6)?,
-                        self.fetch(opcodes, 7)?,
-                        self.fetch(opcodes, 8)?,
-                    ]) as usize;
+                    ]);
                     Ok(true)
                 } else {
-                    self.pc += 9;
+                    self.pc += 5;
                     Ok(true)
                 }
             }
@@ -218,37 +197,33 @@ impl State {
     }
 
     fn op_jp(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        self.pc = u64::from_be_bytes([
+        self.pc = u32::from_be_bytes([
             self.fetch(opcodes, 1)?,
             self.fetch(opcodes, 2)?,
             self.fetch(opcodes, 3)?,
             self.fetch(opcodes, 4)?,
-            self.fetch(opcodes, 5)?,
-            self.fetch(opcodes, 6)?,
-            self.fetch(opcodes, 7)?,
-            self.fetch(opcodes, 8)?,
-        ]) as usize;
+        ]);
         Ok(true)
     }
 
     fn op_call(&mut self, opcodes: &[u8]) -> VMResult<bool> {
         let params_count = self.fetch(opcodes, 1)?;
-        if self.sp < params_count as usize + 1 {
+        if self.sp < params_count as u32 + 1 {
             return Err(VMError::StackUnderflow);
         }
-        let (save_pc, save_locals) = match self.calls.get_mut(self.cp) {
+        let (save_pc, save_locals) = match self.calls.get_mut(self.cp as usize) {
             Some(d) => d,
             None => return Err(VMError::StackOverflow),
         };
         self.cp += 1;
         *save_pc = self.pc + 2;
         *save_locals = self.locals;
-        let address = self.stack[self.sp - params_count as usize - 1];
+        let address = self.stack[(self.sp - params_count as u32 - 1) as usize];
         match address {
-            Value::Address(address) => self.pc = address as usize,
+            Value::Address(address) => self.pc = address,
             _ => return self.error(format!("Expected address, found {address:?}")),
         }
-        self.locals = self.sp - params_count as usize;
+        self.locals = self.sp - params_count as u32;
         Ok(true)
     }
 
@@ -259,7 +234,7 @@ impl State {
         let result = self.pop()?;
         self.sp = self.locals - 1;
         self.push(result)?;
-        let (new_pc, new_locals) = match self.calls.get(self.cp - 1) {
+        let (new_pc, new_locals) = match self.calls.get((self.cp - 1) as usize) {
             Some(d) => d.clone(),
             None => return Err(VMError::StackOverflow),
         };
@@ -271,10 +246,10 @@ impl State {
 
     fn op_ld1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
         let index = self.fetch(opcodes, 1)?;
-        if self.locals + index as usize >= self.stack.len() {
+        if self.locals + index as u32 >= self.stack.len() as u32 {
             panic!("Stack overflow");
         }
-        self.push(self.stack[self.locals + index as usize])?;
+        self.push(self.stack[(self.locals + index as u32) as usize])?;
         self.pc += 2;
         Ok(true)
     }
@@ -304,18 +279,16 @@ impl State {
     }
 
     fn run(&mut self, opcodes: &[u8]) -> VMResult<Value> {
-        while self.step(opcodes)? {
-
-        }
+        while self.step(opcodes)? {}
         self.pop()
     }
 }
 
 fn run<R>(read: &mut R) -> let_result::Result
 where
-    R: std::io::Read + std::io::Seek,
+    R: std::io::Read,
 {
-    let (opcodes, meta) = read_file(read)?;
+    let module = let_module::Module::read(read)?;
 
     let mut state = State {
         pc: 0,
@@ -327,22 +300,13 @@ where
         message: None,
     };
 
-    for line in meta.lines() {
-        let mut tokens = line.split(' ');
-
-        let name = tokens.next().unwrap().trim();
-        let address = tokens.next().unwrap().trim();
-
-        if address == "None" {
-            let_result::raise!("Unknown symbol \"{name}\"")?;
-        } else {
-            if name.ends_with("__ctor__") {
-                state.pc = address.parse::<u64>()? as usize;
-            }
-        }
+    if let Some(pc) = module.labels.get(b"__ctor__") {
+        state.pc = pc;
+    } else {
+        panic!();
     }
 
-    let result = state.run(&opcodes).unwrap();
+    let result = state.run(&module.opcodes).unwrap();
 
     println!("{:?}", result);
     Ok(())

@@ -1,4 +1,4 @@
-use std::{fmt, io::Write, path::PathBuf};
+use std::{fmt, path::PathBuf};
 
 pub use let_emitter::Emitter;
 
@@ -17,34 +17,44 @@ impl<'a> fmt::Display for Slice<'a> {
 
 pub struct ObjectEmitter {
     opcodes: Vec<u8>,
-    names: let_resolver::Name,
-    indexes: let_resolver::Index,
+    named_labels: let_module::NamedLabels,
+    named_links: let_module::NamedLinks,
+    indexed_labels: let_module::IndexedLabels,
+    indexed_links: let_module::IndexedLinks,
 }
 
 impl ObjectEmitter {
     pub fn new() -> Self {
         Self {
             opcodes: Vec::new(),
-            names: let_resolver::Name::new(),
-            indexes: let_resolver::Index::new(),
+            named_labels: let_module::NamedLabels::new(),
+            named_links: let_module::NamedLinks::new(),
+            indexed_labels: let_module::IndexedLabels::new(),
+            indexed_links: let_module::IndexedLinks::new(),
         }
     }
 
-    pub fn finish(&mut self, module: &str) -> let_result::Result {
-        self.indexes.resolve(&mut self.opcodes)?;
-        self.names.resolve(&mut self.opcodes)?;
-        let size = self.opcodes.len();
-        self.names.save(Some(module), &mut self.opcodes)?;
-        self.opcodes.extend((size as u64).to_be_bytes());
+    pub fn finish(mut self, module_name: &str) -> let_result::Result {
+        self.indexed_links
+            .resolve(&self.indexed_labels, &mut self.opcodes)?;
+        self.named_links
+            .resolve(&self.named_labels, &mut self.opcodes)?;
+
+        let module = let_module::Module {
+            opcodes: self.opcodes,
+            labels: self.named_labels,
+            links: self.named_links,
+        };
+
         let mut path = PathBuf::new();
         path.push("build");
         if !path.exists() {
             std::fs::create_dir(path.as_path())?;
         }
-        path.push(module);
+        path.push(module_name);
         path.set_extension("lbin");
         match std::fs::File::create(path.as_path()) {
-            Ok(mut file) => file.write_all(&self.opcodes)?,
+            Ok(mut file) => module.write(&mut file)?,
             Err(error) => {
                 return let_result::raise!(
                     "Unable to create file {:?}, error: {error}.",
@@ -60,10 +70,9 @@ impl let_emitter::Emitter for ObjectEmitter {
     fn integer(&mut self, value: u64) -> let_emitter::Result {
         if value <= u8::MAX as u64 {
             self.opcodes.extend(&[let_opcodes::INT1, value as u8]);
-        } else if value <= 0xFFFFFF {
+        } else if value <= 0xFFFF {
             self.opcodes.extend(&[
-                let_opcodes::INT3,
-                (value >> 16) as u8,
+                let_opcodes::INT2,
                 (value >> 8) as u8,
                 value as u8,
             ]);
@@ -105,51 +114,50 @@ impl let_emitter::Emitter for ObjectEmitter {
         Ok(())
     }
 
-    fn label(&mut self, id: u64) -> let_emitter::Result {
-        self.indexes.label(id, self.opcodes.len() as u64)?;
+    fn label(&mut self, id: u32) -> let_emitter::Result {
+        self.indexed_labels.push(id, self.opcodes.len() as u32)?;
         Ok(())
     }
 
     fn label_named(&mut self, name: &[u8]) -> let_emitter::Result {
-        self.names.label(name, self.opcodes.len() as u64)?;
+        self.named_labels.push(name, self.opcodes.len() as u32)?;
         Ok(())
     }
 
-    fn jump(&mut self, id: u64) -> let_emitter::Result {
+    fn jump(&mut self, id: u32) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JP]);
-        self.indexes.link(id, self.opcodes.len() as u64);
-        self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        self.indexed_links.push(id, self.opcodes.len() as u32);
+        self.opcodes.extend(&[0, 0, 0, 0]);
         Ok(())
     }
 
     fn jump_name(&mut self, name: &[u8]) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JP]);
-        self.names.link(name, self.opcodes.len() as u64);
-        self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        self.named_links.push(name, self.opcodes.len() as u32);
+        self.opcodes.extend(&[0, 0, 0, 0]);
         Ok(())
     }
 
-    fn jump_false(&mut self, id: u64) -> let_emitter::Result {
+    fn jump_false(&mut self, id: u32) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JPF]);
-        self.indexes.link(id, self.opcodes.len() as u64);
-        self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        self.indexed_links.push(id, self.opcodes.len() as u32);
+        self.opcodes.extend(&[0, 0, 0, 0]);
         Ok(())
     }
 
     fn jump_false_name(&mut self, name: &[u8]) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::JPF]);
-        self.names.link(name, self.opcodes.len() as u64);
-        self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        self.named_links.push(name, self.opcodes.len() as u32);
+        self.opcodes.extend(&[0, 0, 0, 0]);
         Ok(())
     }
 
-    fn load(&mut self, index: u64) -> let_emitter::Result {
-        if index <= u8::MAX as u64 {
+    fn load(&mut self, index: u32) -> let_emitter::Result {
+        if index <= u8::MAX as u32 {
             self.opcodes.extend(&[let_opcodes::LD1, index as u8]);
         } else if index <= 0xFFFFFF {
             self.opcodes.extend(&[
-                let_opcodes::LD3,
-                (index >> 16) as u8,
+                let_opcodes::LD2,
                 (index >> 8) as u8,
                 index as u8,
             ]);
@@ -162,8 +170,8 @@ impl let_emitter::Emitter for ObjectEmitter {
 
     fn pointer(&mut self, name: &[u8]) -> let_emitter::Result {
         self.opcodes.extend(&[let_opcodes::PTR]);
-        self.names.link(name, self.opcodes.len() as u64);
-        self.opcodes.extend(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        self.named_links.push(name, self.opcodes.len() as u32);
+        self.opcodes.extend(&[0, 0, 0, 0]);
         Ok(())
     }
 

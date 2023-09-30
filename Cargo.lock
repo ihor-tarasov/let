@@ -26,10 +26,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "let_module"
+version = "0.1.0"
+dependencies = [
+ "let_opcodes",
+ "let_result",
+]
+
+[[package]]
 name = "let_object_emitter"
 version = "0.1.0"
 dependencies = [
  "let_emitter",
+ "let_module",
  "let_opcodes",
  "let_resolver",
  "let_result",
@@ -92,6 +101,7 @@ dependencies = [
 name = "letr"
 version = "0.1.0"
 dependencies = [
+ "let_module",
  "let_opcodes",
  "let_result",
 ]

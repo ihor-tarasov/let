@@ -25,7 +25,7 @@ where
 
         if line.starts_with("LD ") {
             line = line[3..].trim();
-            self.emiter.load(line.parse::<u64>()?)
+            self.emiter.load(line.parse::<u32>()?)
         } else if line.starts_with("PTR ") {
             line = line[3..].trim();
             self.emiter.pointer(line.as_bytes())

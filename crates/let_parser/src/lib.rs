@@ -117,7 +117,7 @@ where
 
     fn identifier(&mut self) -> let_result::Result {
         if let Some(index) = self.find_variable(self.lexer.buffer()) {
-            self.emitter.load(index as u64)?;
+            self.emitter.load(index as u32)?;
         } else {
             self.emitter.pointer(self.lexer.buffer())?;
         }
@@ -252,7 +252,7 @@ where
         // Condition
         self.expression()?;
         let mut next_id = self.get_lable_id();
-        self.emitter.jump_false(next_id as u64)?;
+        self.emitter.jump_false(next_id as u32)?;
 
         // Block.
         self.enter_block();
@@ -261,30 +261,30 @@ where
 
         loop {
             if self.token_is_buf(token::Token::Identifier, b"end") {
-                self.emitter.label(next_id as u64)?;
-                self.emitter.label(end_if_id as u64)?;
+                self.emitter.label(next_id as u32)?;
+                self.emitter.label(end_if_id as u32)?;
                 self.next(); // Skip "end"
                 break;
             } else if self.token_is_buf(token::Token::Identifier, b"elif") {
-                self.emitter.jump(end_if_id as u64)?;
-                self.emitter.label(next_id as u64)?;
+                self.emitter.jump(end_if_id as u32)?;
+                self.emitter.label(next_id as u32)?;
                 self.next(); // Skip "elif"
                 self.expression()?; // Condition.
                 next_id = self.get_lable_id();
-                self.emitter.jump_false(next_id as u64)?;
+                self.emitter.jump_false(next_id as u32)?;
                 // Block.
                 self.enter_block();
                 self.block(&[b"end", b"else", b"elif"])?;
                 self.exit_block();
             } else if self.token_is_buf(token::Token::Identifier, b"else") {
-                self.emitter.jump(end_if_id as u64)?;
-                self.emitter.label(next_id as u64)?;
+                self.emitter.jump(end_if_id as u32)?;
+                self.emitter.label(next_id as u32)?;
                 // Block.
                 self.enter_block();
                 self.next(); // Skip "else"
                 self.block(&[b"end"])?;
                 self.exit_block();
-                self.emitter.label(end_if_id as u64)?;
+                self.emitter.label(end_if_id as u32)?;
                 self.next(); // Skip "end"
                 break;
             }
