@@ -34,7 +34,7 @@ impl ObjectEmitter {
         }
     }
 
-    pub fn finish(mut self, path: &str, module_name: &str) -> let_result::Result {
+    pub fn finish(mut self, path: &str, module_name: &[u8]) -> let_result::Result {
         self.indexed_links
             .resolve(&self.indexed_labels, &mut self.opcodes)?;
         self.named_links
@@ -47,7 +47,7 @@ impl ObjectEmitter {
         };
 
         match std::fs::File::create(path) {
-            Ok(mut file) => module.write_prefixed(module_name.as_bytes(), &mut file)?,
+            Ok(mut file) => module.write_prefixed(module_name, &mut file)?,
             Err(error) => {
                 return let_result::raise!("Unable to create file {:?}, error: {error}.", path)
             }

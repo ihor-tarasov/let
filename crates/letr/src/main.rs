@@ -300,7 +300,7 @@ where
         message: None,
     };
 
-    if let Some(pc) = module.labels.get(b"main.__ctor__") {
+    if let Some(pc) = module.labels.get(b"main") {
         state.pc = pc;
     } else {
         panic!();

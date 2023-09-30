@@ -41,7 +41,7 @@ fn compile(input_path: &str, output_path: &str, compile_assembly: bool) -> let_r
             } else {
                 let mut emitter = let_object_emitter::ObjectEmitter::new();
                 parse(input_path, file, &mut emitter)?;
-                let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+                let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap().as_bytes();
                 emitter.finish(output_path, module_name)?;
             }
             println!(

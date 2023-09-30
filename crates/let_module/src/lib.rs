@@ -85,8 +85,12 @@ impl NamedLabels {
     {
         debug_assert!(self.0.len() <= u32::MAX as usize);
         utils::write_u32(write, self.0.len() as u32)?;
-        for (k, v) in self.0.iter() {
-            utils::write_labels(write, prefix, k)?;
+        for (name, v) in self.0.iter() {
+            if name.as_ref() == b"__ctor__" {
+                utils::write_label(write, name)?;
+            } else {
+                utils::write_labels(write, prefix, name)?;
+            }
             utils::write_u32(write, *v)?;
         }
         Ok(())

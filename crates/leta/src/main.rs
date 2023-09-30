@@ -2,7 +2,7 @@ use std::path::Path;
 
 fn assemble(input_path: &str, output_path: &str) -> let_result::Result {
     let start = std::time::Instant::now();
-    let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+    let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap().as_bytes();
     match std::fs::File::open(input_path) {
         Ok(file) => {
             let mut emitter = let_object_emitter::ObjectEmitter::new();
