@@ -6,5 +6,3 @@ fn factorial(n)
         n * factorial(n - 1)
     end
 end
-
-factorial(6)

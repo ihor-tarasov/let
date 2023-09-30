@@ -1,0 +1,6 @@
+
+fn main()
+    utils.factorial(6)
+end
+
+main()

@@ -136,12 +136,12 @@ where
                 return let_result::raise!("Reached maximum function argumens number");
             }
 
-            self.expression()?;
-            arguments += 1;
-
             if self.token_is_buf(token::Token::Operator, &[b')']) {
                 break;
             }
+
+            self.expression()?;
+            arguments += 1;
         }
 
         self.next(); // Skip ')'.

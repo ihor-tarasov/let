@@ -1,4 +1,4 @@
-use std::{fmt, path::PathBuf};
+use std::fmt;
 
 pub use let_emitter::Emitter;
 
@@ -34,7 +34,7 @@ impl ObjectEmitter {
         }
     }
 
-    pub fn finish(mut self, module_name: &str) -> let_result::Result {
+    pub fn finish(mut self, path: &str, module_name: &str) -> let_result::Result {
         self.indexed_links
             .resolve(&self.indexed_labels, &mut self.opcodes)?;
         self.named_links
@@ -46,20 +46,10 @@ impl ObjectEmitter {
             links: self.named_links,
         };
 
-        let mut path = PathBuf::new();
-        path.push("build");
-        if !path.exists() {
-            std::fs::create_dir(path.as_path())?;
-        }
-        path.push(module_name);
-        path.set_extension("lbin");
-        match std::fs::File::create(path.as_path()) {
+        match std::fs::File::create(path) {
             Ok(mut file) => module.write_prefixed(module_name.as_bytes(), &mut file)?,
             Err(error) => {
-                return let_result::raise!(
-                    "Unable to create file {:?}, error: {error}.",
-                    path.as_os_str()
-                )
+                return let_result::raise!("Unable to create file {:?}, error: {error}.", path)
             }
         }
         Ok(())

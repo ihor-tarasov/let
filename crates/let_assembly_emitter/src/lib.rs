@@ -94,9 +94,7 @@ impl<W: std::io::Write> let_emitter::Emitter for AssemblyEmitter<W> {
 }
 
 pub fn open(path: &str) -> let_result::Result<impl let_emitter::Emitter> {
-    let mut path = path[..(path.len() - 4)].to_string();
-    path.push_str(".asm");
-    match std::fs::File::create(path.as_str()) {
+    match std::fs::File::create(path) {
         Ok(file) => Ok(AssemblyEmitter::new(std::io::BufWriter::new(file))),
         Err(error) => let_result::raise!("Unable to create file \"{path}\", error: {error}"),
     }

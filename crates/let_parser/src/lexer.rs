@@ -72,7 +72,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         self.buffer.clear();
         self.buffer.push(c);
         while let Some(c) = self.current() {
-            if c.is_ascii_alphanumeric() || c == b'_' {
+            if c.is_ascii_alphanumeric() || c == b'_' || c == b'.' {
                 self.buffer.push(c);
                 self.next();
             } else {

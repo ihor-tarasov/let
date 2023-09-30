@@ -28,44 +28,49 @@ where
     Ok(())
 }
 
-fn compile(path: &str, compile_assembly: bool) -> let_result::Result {
+fn compile(input_path: &str, output_path: &str, compile_assembly: bool) -> let_result::Result {
     let start = std::time::Instant::now();
-    match std::fs::File::open(path) {
+    match std::fs::File::open(input_path) {
         Ok(file) => {
             if compile_assembly {
-                parse(path, file, &mut let_assembly_emitter::open(path)?)?;
+                parse(
+                    input_path,
+                    file,
+                    &mut let_assembly_emitter::open(output_path)?,
+                )?;
             } else {
                 let mut emitter = let_object_emitter::ObjectEmitter::new();
-                parse(path, file, &mut emitter)?;
-                let module = Path::new(path).file_stem().unwrap().to_str().unwrap();
-                emitter.finish(module)?;
+                parse(input_path, file, &mut emitter)?;
+                let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+                emitter.finish(output_path, module_name)?;
             }
             println!(
-                "Compiled \"{path}\", time: {} seconds",
+                "Compiled \"{input_path}\", time: {} seconds",
                 (std::time::Instant::now() - start).as_secs_f64()
             );
             Ok(())
         }
-        Err(error) => let_result::raise!("Unable to open file \"{path}\", error: {error}"),
+        Err(error) => let_result::raise!("Unable to open file \"{input_path}\", error: {error}"),
     }
 }
 
 fn main() -> std::process::ExitCode {
     println!("Let Compiler");
+    let mut input_path: Option<String> = None;
     let mut compile_assembly = false;
     for arg in std::env::args().skip(1) {
         if arg == "-a" || arg == "--assembly" {
             compile_assembly = true;
-        } else if arg == "-o" || arg == "--object" {
-            compile_assembly = false;
-        } else {
-            match compile(&arg, compile_assembly) {
+        } else if let Some(input_path) = input_path.take() {
+            match compile(&input_path, &arg, compile_assembly) {
                 Ok(_) => (),
                 Err(error) => {
                     eprintln!("{error}");
                     return std::process::ExitCode::FAILURE;
                 }
             }
+        } else {
+            input_path = Some(arg)
         }
     }
     std::process::ExitCode::SUCCESS
