@@ -75,8 +75,8 @@ pub fn read_u8_vec<R: std::io::Read>(read: &mut R) -> let_result::Result<Vec<u8>
 pub fn read_u32_vec<R: std::io::Read>(read: &mut R) -> let_result::Result<Vec<u32>> {
     let len = read_u32(read)?;
     let mut result = Vec::with_capacity(len as usize);
-    for data in result.iter_mut() {
-        *data = read_u32(read)?;
+    for _ in 0..len {
+        result.push(read_u32(read)?);
     }
     Ok(result)
 }

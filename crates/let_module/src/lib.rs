@@ -177,8 +177,11 @@ impl NamedLinks {
         Ok(Self(result))
     }
 
-    pub fn merge(&mut self, other: Self) {
-        for (name, src_links) in other.0 {
+    pub fn merge(&mut self, other: Self, offset: u32) {
+        for (name, mut src_links) in other.0 {
+            for link in src_links.iter_mut() {
+                *link = *link + offset;
+            }
             if let Some(links) = self.0.get_mut(&name) {
                 links.extend(src_links);
             } else {
@@ -333,7 +336,7 @@ impl Module {
         }
 
         self.labels.merge(other.labels, offset)?;
-        self.links.merge(other.links);
+        self.links.merge(other.links, offset);
 
         self.resolve()?;
 
