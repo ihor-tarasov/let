@@ -23,6 +23,7 @@ enum Value {
     Boolean(bool),
     Integer(i64),
     Address(u32),
+    CallState(u32, u32),
 }
 
 impl fmt::Display for Value {
@@ -32,6 +33,7 @@ impl fmt::Display for Value {
             Value::Boolean(value) => write!(f, "{value}"),
             Value::Integer(value) => write!(f, "{value}"),
             Value::Address(value) => write!(f, "{value}"),
+            Value::CallState(pc, locals) => write!(f, "(PC:{pc} LC:{locals})"),
         }
     }
 }
@@ -39,8 +41,6 @@ impl fmt::Display for Value {
 struct State {
     pc: u32,
     stack: [Value; 256],
-    calls: [(u32, u32); 256],
-    cp: u32,
     sp: u32,
     locals: u32,
     message: Option<String>,
@@ -253,12 +253,15 @@ impl State {
                     dumpop!("JPF {}", self.pc);
                     Ok(true)
                 } else {
-                    dumpop!("JPF {}", u32::from_be_bytes([
-                        self.fetch(opcodes, 1)?,
-                        self.fetch(opcodes, 2)?,
-                        self.fetch(opcodes, 3)?,
-                        self.fetch(opcodes, 4)?,
-                    ]));
+                    dumpop!(
+                        "JPF {}",
+                        u32::from_be_bytes([
+                            self.fetch(opcodes, 1)?,
+                            self.fetch(opcodes, 2)?,
+                            self.fetch(opcodes, 3)?,
+                            self.fetch(opcodes, 4)?,
+                        ])
+                    );
                     self.pc += 5;
                     Ok(true)
                 }
@@ -284,14 +287,9 @@ impl State {
         if self.sp < params_count as u32 + 1 {
             return Err(VMError::StackUnderflow);
         }
-        let (save_pc, save_locals) = match self.calls.get_mut(self.cp as usize) {
-            Some(d) => d,
-            None => return Err(VMError::StackOverflow),
-        };
-        self.cp += 1;
-        *save_pc = self.pc + 2;
-        *save_locals = self.locals;
-        let address = self.stack[(self.sp - params_count as u32 - 1) as usize];
+        let in_stack_offset = self.sp - params_count as u32 - 1;
+        let address = self.stack[in_stack_offset as usize];
+        self.stack[in_stack_offset as usize] = Value::CallState(self.pc + 2, self.locals);
         match address {
             Value::Address(address) => self.pc = address,
             _ => return self.error(format!("Expected address, found {address:?}")),
@@ -302,19 +300,20 @@ impl State {
 
     fn op_ret(&mut self) -> VMResult<bool> {
         dumpop!("RET");
-        if self.cp == 0 {
+        if self.locals == 0 {
             return Ok(false);
         }
         let result = self.pop()?;
         self.sp = self.locals - 1;
-        self.push(result)?;
-        let (new_pc, new_locals) = match self.calls.get((self.cp - 1) as usize) {
-            Some(d) => d.clone(),
-            None => return Err(VMError::StackOverflow),
-        };
-        self.cp -= 1;
-        self.pc = new_pc;
-        self.locals = new_locals;
+        let call_state = self.stack[self.sp as usize];
+        match call_state {
+            Value::CallState(new_pc, new_locals) => {
+                self.push(result)?;
+                self.pc = new_pc;
+                self.locals = new_locals;
+            }
+            _ => return self.error(format!("Expected CallState, found {call_state:?}")),
+        }
         Ok(true)
     }
 
@@ -367,13 +366,6 @@ impl State {
     }
 
     fn dump_stack(&self) {
-        if self.cp == 0 {
-            print!("[]");
-        }
-        for i in 0..self.cp {
-            print!("[ {}, {} ] ", self.calls[i as usize].0, self.calls[i as usize].1);
-        }
-        println!();
         if self.sp == 0 {
             print!("[]");
         }
@@ -406,8 +398,6 @@ where
     let mut state = State {
         pc: 0,
         stack: [Value::Void; 256],
-        calls: [(0, 0); 256],
-        cp: 0,
         sp: 0,
         locals: 0,
         message: None,
@@ -423,7 +413,7 @@ where
         Ok(result) => {
             println!("{}", result);
             Ok(())
-        },
+        }
         Err(error) => match error {
             VMError::StackUnderflow => let_result::raise!("Stack underflow."),
             VMError::StackOverflow => let_result::raise!("Stack overflow."),
