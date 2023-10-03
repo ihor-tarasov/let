@@ -191,4 +191,17 @@ impl let_emitter::Emitter for ObjectEmitter {
             self.opcodes.extend(&index.to_le_bytes());
         }
     }
+
+    fn offset(&self) -> u32 {
+        self.opcodes.len() as u32
+    }
+
+    fn jump_to(&mut self, address: u32) {
+        self.opcodes.push(let_opcodes::JP);
+        self.opcodes.extend(&address.to_be_bytes());
+    }
+
+    fn void(&mut self) {
+        self.opcodes.push(let_opcodes::VOID);
+    }
 }

@@ -1,7 +1,11 @@
 
 fn main()
-    let number = 6
-    utils.factorial(number)
+    let i = 0
+    while i < 7
+        let result = utils.factorial(i)
+        i = i + 1
+        result
+    end
 end
 
 main()

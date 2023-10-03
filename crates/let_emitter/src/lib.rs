@@ -18,7 +18,10 @@ pub trait Emitter {
 
     // Returns pointer to stack size.
     fn function(&mut self, args_count: u8) -> let_result::Result<u32>;
-    
+
     fn set(&mut self, address: u32, value: u8);
     fn store(&mut self, local_id: u32);
+    fn offset(&self) -> u32;
+    fn jump_to(&mut self, address: u32);
+    fn void(&mut self);
 }

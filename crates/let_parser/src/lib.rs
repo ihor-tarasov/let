@@ -179,19 +179,7 @@ where
         self.functions.last().unwrap().get(name)
     }
 
-    fn identifier(&mut self) -> let_result::Result {
-        if let Some(index) = self.find_variable(self.lexer.buffer()) {
-            self.emitter.load(index);
-        } else {
-            self.emitter.pointer(self.lexer.buffer())?;
-        }
-        self.next(); // Skip identifier.
-
-        if !self.token_is_buf(token::Token::Operator, &[b'(']) {
-            return Ok(());
-        }
-
-        // Call.
+    fn call(&mut self) -> let_result::Result {
         self.next(); // Skip '('.
 
         let mut arguments = 0;
@@ -213,10 +201,40 @@ where
         self.emitter.call(arguments as u8)
     }
 
+    fn assign(&mut self, index: u32) -> let_result::Result {
+        self.next(); // Skip '='.
+        self.expression()?;
+        self.emitter.store(index);
+        Ok(())
+    }
+
+    fn identifier(&mut self) -> let_result::Result {
+        if let Some(index) = self.find_variable(self.lexer.buffer()) {
+            self.next(); // Skip identifier.
+
+            match (self.token, self.lexer.buffer()) {
+                (Some(token::Token::Operator), b"=") => self.assign(index),
+                _ => {
+                    self.emitter.load(index);
+                    Ok(())
+                },
+            }
+        } else {
+            self.emitter.pointer(self.lexer.buffer())?;
+            self.next(); // Skip identifier.
+
+            match (self.token, self.lexer.buffer()) {
+                (Some(token::Token::Operator), b"(") => self.call(),
+                _ => Ok(()),
+            }
+        }
+    }
+
     fn primary(&mut self) -> let_result::Result {
         match (self.token, self.lexer.buffer()) {
             (Some(token::Token::Identifier), b"if") => self.p_if(),
             (Some(token::Token::Identifier), b"let") => self.p_let(),
+            (Some(token::Token::Identifier), b"while") => self.p_while(),
             (Some(token::Token::Identifier), _) => self.identifier(),
             (Some(token::Token::Integer), _) => self.integer(),
             (Some(token::Token::Real), _) => self.real(),
@@ -363,6 +381,33 @@ where
                 break;
             }
         }
+
+        Ok(())
+    }
+
+    fn p_while(&mut self) -> let_result::Result {
+        self.next(); // Skip "while"
+
+        self.emitter.void();
+
+        let while_start = self.emitter.offset();
+
+        // Condition
+        self.expression()?;
+        let end_id = self.get_lable_id();
+        self.emitter.jump_false(end_id as u32)?;
+
+        self.emitter.drop()?;
+
+        // Block.
+        self.enter_block();
+        self.block(&[b"end"])?;
+        self.exit_block();
+
+        self.emitter.jump_to(while_start);
+
+        self.emitter.label(end_id as u32)?;
+        self.next(); // Skip "end"
 
         Ok(())
     }

@@ -55,9 +55,11 @@ impl fmt::Display for Value {
     }
 }
 
+const STACK_SIZE: usize = 32;
+
 struct State {
     pc: u32,
-    stack: [Value; 256],
+    stack: [Value; STACK_SIZE],
     sp: u32,
     locals: u32,
     message: Option<String>,
@@ -213,6 +215,13 @@ impl State {
         Ok(true)
     }
 
+    fn op_void(&mut self) -> VMResult<bool> {
+        dumpop!("VOID");
+        self.push(Value::Void)?;
+        self.pc += 1;
+        Ok(true)
+    }
+
     fn op_int1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
         let val = fetch_u8(opcodes, self.pc + 1)?;
         dumpop!("INT {val}");
@@ -335,6 +344,7 @@ impl State {
             let_opcodes::LE => self.op_binary(Self::bin_le),
             let_opcodes::SUB => self.op_binary(Self::bin_sub),
             let_opcodes::MUL => self.op_binary(Self::bin_mul),
+            let_opcodes::VOID => self.op_void(),
             let_opcodes::INT1 => self.op_int1(opcodes),
             let_opcodes::PTR => self.op_ptr(opcodes),
             let_opcodes::JPF => self.op_jpf(opcodes),
@@ -376,7 +386,7 @@ where
 
     let mut state = State {
         pc: 0,
-        stack: [Value::Void; 256],
+        stack: [Value::Void; STACK_SIZE],
         sp: 0,
         locals: 0,
         message: None,

@@ -8,6 +8,7 @@ impl_opcodes!(
     // 0x00..=0x2F 1 byte opcodes
     RET: 0x00
     DROP: 0x01
+    VOID: 0x02
 
     // Operators opcodes is in range 0x10..=0x1F
     LS: 0x10
