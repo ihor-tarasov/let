@@ -181,7 +181,7 @@ where
 
     fn identifier(&mut self) -> let_result::Result {
         if let Some(index) = self.find_variable(self.lexer.buffer()) {
-            self.emitter.load(index)?;
+            self.emitter.load(index);
         } else {
             self.emitter.pointer(self.lexer.buffer())?;
         }
@@ -216,6 +216,7 @@ where
     fn primary(&mut self) -> let_result::Result {
         match (self.token, self.lexer.buffer()) {
             (Some(token::Token::Identifier), b"if") => self.p_if(),
+            (Some(token::Token::Identifier), b"let") => self.p_let(),
             (Some(token::Token::Identifier), _) => self.identifier(),
             (Some(token::Token::Integer), _) => self.integer(),
             (Some(token::Token::Real), _) => self.real(),
@@ -295,6 +296,27 @@ where
 
     fn add_local(&mut self) -> u32 {
         self.functions.last_mut().unwrap().var(self.lexer.buffer())
+    }
+
+    fn p_let(&mut self) -> let_result::Result {
+        self.next(); // Skip "let"
+
+        if !self.token_is(token::Token::Identifier) {
+            return let_result::raise!("Expected variable name.");
+        }
+
+        let local_id = self.add_local();
+        self.next(); // Skip variable name.
+
+        if !self.token_is_buf(token::Token::Operator, &[b'=']) {
+            return let_result::raise!("Expected '='.");
+        }
+        self.next(); // Skip '='
+
+        self.expression()?;
+        self.emitter.store(local_id);
+
+        Ok(())
     }
 
     fn p_if(&mut self) -> let_result::Result {

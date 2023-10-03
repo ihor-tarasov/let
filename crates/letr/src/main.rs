@@ -1,8 +1,8 @@
 use core::fmt;
 use std::fs::File;
 
-const DUMP_OPCODE: bool = false;
-const DUMP_STACK: bool = false;
+const DUMP_OPCODE: bool = true;
+const DUMP_STACK: bool = true;
 
 macro_rules! dumpop {
     () => {
@@ -88,6 +88,17 @@ impl State {
         } else {
             self.sp -= 1;
             Ok(self.stack[self.sp as usize])
+        }
+    }
+
+    /// Peek last value in stack.
+    fn peek(&mut self) -> VMResult<Value> {
+        if self.sp == 0 {
+            Err(VMError::StackUnderflow)
+        } else if self.sp >= self.stack.len() as u32 {
+            Err(VMError::StackOverflow)
+        } else {
+            Ok(self.stack[(self.sp - 1) as usize])
         }
     }
 
@@ -318,6 +329,17 @@ impl State {
         Ok(true)
     }
 
+    fn op_st1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        let index = self.fetch(opcodes, 1)?;
+        dumpop!("ST {index}");
+        if self.locals + index as u32 >= self.stack.len() as u32 {
+            panic!("Stack overflow");
+        }
+        self.stack[(self.locals + index as u32) as usize] = self.peek()?;
+        self.pc += 2;
+        Ok(true)
+    }
+
     /// Executes one opcode.
     /// Returns Ok(false) if VM is stopped.
     fn step(&mut self, opcodes: &[u8]) -> VMResult<bool> {
@@ -339,6 +361,7 @@ impl State {
             let_opcodes::CALL => self.op_call(opcodes),
             let_opcodes::RET => self.op_ret(),
             let_opcodes::LD1 => self.op_ld1(opcodes),
+            let_opcodes::ST1 => self.op_st1(opcodes),
             _ => self.error(format!("Unknown opcode 0x{opcode:02X}")),
         }
     }
@@ -367,6 +390,7 @@ impl State {
         while self.step(opcodes)? {
             if DUMP_STACK {
                 self.dump_stack();
+                println!();
             }
         }
         self.pop()
@@ -392,7 +416,7 @@ where
     if let Some(pc) = module.labels.get(b"main") {
         state.pc = pc;
     } else {
-        panic!();
+        return let_result::raise!("Unable to find \"main\" module.");
     }
 
     match state.run(&module.opcodes) {

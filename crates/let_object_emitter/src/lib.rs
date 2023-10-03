@@ -139,17 +139,16 @@ impl let_emitter::Emitter for ObjectEmitter {
         Ok(())
     }
 
-    fn load(&mut self, index: u32) -> let_emitter::Result {
+    fn load(&mut self, index: u32) {
         if index <= u8::MAX as u32 {
             self.opcodes.extend(&[let_opcodes::LD1, index as u8]);
-        } else if index <= 0xFFFFFF {
+        } else if index <= 0xFFFF {
             self.opcodes
                 .extend(&[let_opcodes::LD2, (index >> 8) as u8, index as u8]);
         } else {
-            self.opcodes.extend(&[let_opcodes::INT8]);
-            self.opcodes.extend(&index.to_be_bytes());
+            self.opcodes.push(let_opcodes::LD4);
+            self.opcodes.extend(&index.to_le_bytes());
         }
-        Ok(())
     }
 
     fn pointer(&mut self, name: &[u8]) -> let_emitter::Result {
@@ -172,5 +171,17 @@ impl let_emitter::Emitter for ObjectEmitter {
 
     fn set(&mut self, address: u32, value: u8) {
         self.opcodes[address as usize] = value;
-    }    
+    }
+
+    fn store(&mut self, index: u32) {
+        if index <= u8::MAX as u32 {
+            self.opcodes.extend(&[let_opcodes::ST1, index as u8]);
+        } else if index <= 0xFFFF {
+            self.opcodes
+                .extend(&[let_opcodes::ST2, (index >> 8) as u8, index as u8]);
+        } else {
+            self.opcodes.push(let_opcodes::ST4);
+            self.opcodes.extend(&index.to_le_bytes());
+        }
+    }
 }

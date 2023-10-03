@@ -1,6 +1,7 @@
 
 fn main()
-    utils.factorial(6)
+    let number = 6
+    utils.factorial(number)
 end
 
 main()
