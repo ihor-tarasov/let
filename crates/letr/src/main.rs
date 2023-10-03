@@ -17,6 +17,23 @@ macro_rules! dumpop {
     }};
 }
 
+fn fetch_u8(opcodes: &[u8], offset: u32) -> VMResult<u8> {
+    if let Some(opcode) = opcodes.get(offset as usize).cloned() {
+        Ok(opcode)
+    } else {
+        Err(VMError::FetchOpcodeError)
+    }
+}
+
+fn fetch_u32(opcodes: &[u8], offset: u32) -> VMResult<u32> {
+    Ok(u32::from_be_bytes([
+        fetch_u8(opcodes, offset)?,
+        fetch_u8(opcodes, offset + 1)?,
+        fetch_u8(opcodes, offset + 2)?,
+        fetch_u8(opcodes, offset + 3)?,
+    ]))
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Value {
     Void,
@@ -99,15 +116,6 @@ impl State {
             Err(VMError::StackOverflow)
         } else {
             Ok(self.stack[(self.sp - 1) as usize])
-        }
-    }
-
-    /// Fetch next one byte from opcodes.
-    fn fetch(&self, opcodes: &[u8], offset: u32) -> VMResult<u8> {
-        if let Some(opcode) = opcodes.get((self.pc + offset) as usize).cloned() {
-            Ok(opcode)
-        } else {
-            Err(VMError::FetchOpcodeError)
         }
     }
 
@@ -206,7 +214,7 @@ impl State {
     }
 
     fn op_int1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let val = self.fetch(opcodes, 1)?;
+        let val = fetch_u8(opcodes, self.pc + 1)?;
         dumpop!("INT {val}");
         self.push(Value::Integer(val as i64))?;
         self.pc += 2;
@@ -214,12 +222,7 @@ impl State {
     }
 
     fn op_ptr(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let address = u32::from_be_bytes([
-            self.fetch(opcodes, 1)?,
-            self.fetch(opcodes, 2)?,
-            self.fetch(opcodes, 3)?,
-            self.fetch(opcodes, 4)?,
-        ]);
+        let address = fetch_u32(opcodes, self.pc + 1)?;
         dumpop!("PTR {address}");
         self.push(Value::Address(address))?;
         self.pc += 5;
@@ -231,23 +234,13 @@ impl State {
         match value {
             Value::Boolean(value) => {
                 if !value {
-                    self.pc = u32::from_be_bytes([
-                        self.fetch(opcodes, 1)?,
-                        self.fetch(opcodes, 2)?,
-                        self.fetch(opcodes, 3)?,
-                        self.fetch(opcodes, 4)?,
-                    ]);
+                    self.pc = fetch_u32(opcodes, self.pc + 1)?;
                     dumpop!("JPF {}", self.pc);
                     Ok(true)
                 } else {
                     dumpop!(
                         "JPF {}",
-                        u32::from_be_bytes([
-                            self.fetch(opcodes, 1)?,
-                            self.fetch(opcodes, 2)?,
-                            self.fetch(opcodes, 3)?,
-                            self.fetch(opcodes, 4)?,
-                        ])
+                        fetch_u32(opcodes, self.pc + 1)?,
                     );
                     self.pc += 5;
                     Ok(true)
@@ -258,18 +251,13 @@ impl State {
     }
 
     fn op_jp(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        self.pc = u32::from_be_bytes([
-            self.fetch(opcodes, 1)?,
-            self.fetch(opcodes, 2)?,
-            self.fetch(opcodes, 3)?,
-            self.fetch(opcodes, 4)?,
-        ]);
+        self.pc = fetch_u32(opcodes, self.pc + 1)?;
         dumpop!("JP {}", self.pc);
         Ok(true)
     }
 
     fn op_call(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let params_count = self.fetch(opcodes, 1)?;
+        let params_count = fetch_u8(opcodes, self.pc + 1)?;
         dumpop!("CALL {params_count}");
         if self.sp < params_count as u32 + 1 {
             return Err(VMError::StackUnderflow);
@@ -282,16 +270,13 @@ impl State {
             _ => return self.error(format!("Expected address, found {address:?}")),
         }
         self.locals = self.sp - params_count as u32;
-        let params_count_for_check = self.fetch(opcodes, 0)?;
+        let params_count_for_check = fetch_u8(opcodes, self.pc)?;
         if params_count != params_count_for_check {
-            return self.error(format!("Different parameters count."));
+            return self.error(format!("Expected {params_count_for_check} function call arguments, found {params_count}."));
         }
-        self.sp += u32::from_be_bytes([
-            self.fetch(opcodes, 1)?,
-            self.fetch(opcodes, 2)?,
-            self.fetch(opcodes, 3)?,
-            self.fetch(opcodes, 4)?,
-        ]);
+        let stack_size = fetch_u32(opcodes, self.pc + 1)?;
+        self.sp += stack_size;
+        dumpop!("Call info: parameters count: {params_count}, stack_size: {stack_size}");
         self.pc += 5;
         Ok(true)
     }
@@ -316,7 +301,7 @@ impl State {
     }
 
     fn op_ld1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let index = self.fetch(opcodes, 1)?;
+        let index = fetch_u8(opcodes, self.pc + 1)?;
         dumpop!("LD {index}");
         if self.locals + index as u32 >= self.stack.len() as u32 {
             panic!("Stack overflow");
@@ -327,7 +312,7 @@ impl State {
     }
 
     fn op_st1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let index = self.fetch(opcodes, 1)?;
+        let index = fetch_u8(opcodes, self.pc + 1)?;
         dumpop!("ST {index}");
         if self.locals + index as u32 >= self.stack.len() as u32 {
             panic!("Stack overflow");
@@ -340,7 +325,7 @@ impl State {
     /// Executes one opcode.
     /// Returns Ok(false) if VM is stopped.
     fn step(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let opcode = self.fetch(opcodes, 0)?;
+        let opcode = fetch_u8(opcodes, self.pc)?;
         match opcode {
             let_opcodes::DROP => self.op_drop(),
             let_opcodes::LS => self.op_binary(Self::bin_ls),
@@ -373,9 +358,6 @@ impl State {
     }
 
     fn run(&mut self, opcodes: &[u8]) -> VMResult<Value> {
-        if DUMP_STACK {
-            println!("[ PC, LOCALS ]");
-        }
         while self.step(opcodes)? {
             if DUMP_STACK {
                 self.dump_stack();
