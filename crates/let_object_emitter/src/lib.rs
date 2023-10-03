@@ -163,4 +163,14 @@ impl let_emitter::Emitter for ObjectEmitter {
         self.opcodes.extend(&[let_opcodes::RET]);
         Ok(())
     }
+
+    fn stack(&mut self) -> let_result::Result<u32> {
+        let address = self.opcodes.len() + 1;
+        self.opcodes.extend(&[let_opcodes::STACK, 0, 0, 0, 0]);
+        Ok(address as u32)
+    }
+
+    fn set(&mut self, address: u32, value: u8) {
+        self.opcodes[address as usize] = value;
+    }    
 }

@@ -7,14 +7,90 @@ use std::{collections::HashMap, ops::Range};
 
 pub use let_result::Result;
 
+struct Block {
+    locals: HashMap<Box<[u8]>, u32>,
+}
+
+impl Block {
+    fn new() -> Self {
+        Self {
+            locals: HashMap::new(),
+        }
+    }
+
+    fn var(&mut self, name: &[u8], id: u32) -> bool {
+        if let Some(local) = self.locals.get_mut(name) {
+            *local = id;
+            true
+        } else {
+            self.locals.insert(Vec::from(name).into_boxed_slice(), id);
+            false
+        }
+    }
+
+    fn get(&self, name: &[u8]) -> Option<u32> {
+        self.locals.get(name).cloned()
+    }
+
+    fn len(&self) -> usize {
+        self.locals.len()
+    }
+}
+
+struct Function {
+    blocks: Vec<Block>,
+    local_counter: u32,
+    stack_size: u32,
+}
+
+impl Function {
+    fn new() -> Self {
+        Self {
+            blocks: vec![Block::new()],
+            local_counter: 0,
+            stack_size: 0,
+        }
+    }
+
+    fn push(&mut self) {
+        self.blocks.push(Block::new());
+    }
+
+    fn pop(&mut self) {
+        let block = self.blocks.pop().unwrap();
+        self.local_counter -= block.len() as u32;
+    }
+
+    fn var(&mut self, name: &[u8]) -> u32 {
+        debug_assert!(!self.blocks.is_empty());
+        let len = self.blocks.len();
+        let id = self.local_counter;
+        if !self.blocks[len - 1].var(name, id) {
+            self.local_counter += 1;
+            if self.local_counter > self.stack_size {
+                self.stack_size = self.local_counter;
+            }
+        }
+        id
+    }
+
+    fn get(&self, name: &[u8]) -> Option<u32> {
+        for block in self.blocks.iter().rev() {
+            if let Some(id) = block.get(name) {
+                return Some(id);
+            }
+        }
+        None
+    }
+}
+
 pub struct Parser<'a, I: Iterator, E> {
     lexer: lexer::Lexer<I>,
     token: Option<token::Token>,
     range: Range<usize>,
     emitter: &'a mut E,
     lable_id: usize,
-    local_id: usize,
-    locals: Vec<HashMap<Box<[u8]>, usize>>, // TODO: Optimize
+    functions: Vec<Function>,
 }
 
 impl<'a, I, E> Parser<'a, I, E>
@@ -29,20 +105,13 @@ where
             range: 0..0,
             emitter,
             lable_id: 0,
-            local_id: 0,
-            locals: Vec::new(),
+            functions: vec![Function::new()],
         }
     }
 
     fn get_lable_id(&mut self) -> usize {
         let result = self.lable_id;
         self.lable_id += 1;
-        result
-    }
-
-    fn get_local_id(&mut self) -> usize {
-        let result = self.local_id;
-        self.local_id += 1;
         result
     }
 
@@ -106,18 +175,13 @@ where
         Ok(())
     }
 
-    fn find_variable(&self, name: &[u8]) -> Option<usize> {
-        for block in self.locals.iter().rev() {
-            if let Some(i) = block.get(name).cloned() {
-                return Some(i);
-            }
-        }
-        None
+    fn find_variable(&self, name: &[u8]) -> Option<u32> {
+        self.functions.last().unwrap().get(name)
     }
 
     fn identifier(&mut self) -> let_result::Result {
         if let Some(index) = self.find_variable(self.lexer.buffer()) {
-            self.emitter.load(index as u32)?;
+            self.emitter.load(index)?;
         } else {
             self.emitter.pointer(self.lexer.buffer())?;
         }
@@ -132,7 +196,7 @@ where
 
         let mut arguments = 0;
         loop {
-            if arguments >= u8::MAX as usize {
+            if arguments > u8::MAX as u32 {
                 return let_result::raise!("Reached maximum function argumens number");
             }
 
@@ -222,33 +286,21 @@ where
     }
 
     fn enter_block(&mut self) {
-        self.locals.push(HashMap::new());
+        self.functions.last_mut().unwrap().push();
     }
 
     fn exit_block(&mut self) {
-        let block_size = self.locals.last().unwrap().len();
-        self.local_id -= block_size;
-        self.locals.pop().unwrap();
+        self.functions.last_mut().unwrap().pop();
     }
 
-    fn add_local(&mut self) -> let_result::Result {
-        let index = self.get_local_id();
-        if self
-            .locals
-            .last_mut()
-            .unwrap()
-            .insert(Vec::from(self.lexer.buffer()).into_boxed_slice(), index)
-            .is_some()
-        {
-            return let_result::raise!("Variable \"{:?}\" already exists.", self.lexer.buffer());
-        }
-        Ok(())
+    fn add_local(&mut self) -> u32 {
+        self.functions.last_mut().unwrap().var(self.lexer.buffer())
     }
 
     fn p_if(&mut self) -> let_result::Result {
         let end_if_id = self.get_lable_id();
         self.next(); // Skip "if"
-        
+
         // Condition
         self.expression()?;
         let mut next_id = self.get_lable_id();
@@ -293,7 +345,9 @@ where
         Ok(())
     }
 
-    fn prototype(&mut self) -> let_result::Result {
+    fn function(&mut self) -> let_result::Result {
+        self.next(); // Skip "fn"
+
         if !self.token_is(token::Token::Identifier) {
             return let_result::raise!("Expected function name.");
         }
@@ -301,14 +355,23 @@ where
         self.emitter.label_named(self.lexer.buffer())?;
         self.next();
 
+        let stack_size_address = self.emitter.stack()?;
+
         if !self.token_is_buf(token::Token::Operator, &[b'(']) {
             return let_result::raise!("Expected '('.");
         }
         self.next();
 
+        self.functions.push(Function::new());
+
+        let mut args_count = 0;
         while self.token_is(token::Token::Identifier) {
-            self.add_local()?;
+            if args_count > u8::MAX as u32 {
+                return let_result::raise!("Reached maximum function argumens number");
+            }
+            self.add_local();
             self.next();
+            args_count += 1;
         }
 
         if !self.token_is_buf(token::Token::Operator, &[b')']) {
@@ -317,20 +380,19 @@ where
 
         self.next();
 
-        Ok(())
-    }
-
-    fn function(&mut self) -> let_result::Result {
-        self.next(); // Skip "fn"
-
-        self.enter_block();
-        self.prototype()?;
-
         self.block(&[b"end"])?;
         self.next();
 
         self.emitter.ret()?;
-        self.exit_block();
+
+        let function = self.functions.pop().unwrap();
+
+        (function.stack_size - args_count)
+            .to_be_bytes()
+            .iter()
+            .cloned()
+            .enumerate()
+            .for_each(|(i, b)| self.emitter.set(stack_size_address + i as u32, b));
 
         Ok(())
     }

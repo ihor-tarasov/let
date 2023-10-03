@@ -1,4 +1,21 @@
+use core::fmt;
 use std::fs::File;
+
+const DUMP_OPCODE: bool = false;
+const DUMP_STACK: bool = false;
+
+macro_rules! dumpop {
+    () => {
+        if DUMP_OPCODE {
+            println!();
+        }
+    };
+    ($($arg:tt)*) => {{
+        if DUMP_OPCODE {
+            println!($($arg)*);
+        }
+    }};
+}
 
 #[derive(Debug, Clone, Copy)]
 enum Value {
@@ -6,6 +23,17 @@ enum Value {
     Boolean(bool),
     Integer(i64),
     Address(u32),
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Void => write!(f, "()"),
+            Value::Boolean(value) => write!(f, "{value}"),
+            Value::Integer(value) => write!(f, "{value}"),
+            Value::Address(value) => write!(f, "{value}"),
+        }
+    }
 }
 
 struct State {
@@ -78,6 +106,7 @@ impl State {
     }
 
     fn bin_ls(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("LS");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l < r)),
             _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
@@ -85,6 +114,7 @@ impl State {
     }
 
     fn bin_le(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("LE");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l <= r)),
             _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
@@ -92,6 +122,7 @@ impl State {
     }
 
     fn bin_gr(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("GR");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l > r)),
             _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
@@ -99,6 +130,7 @@ impl State {
     }
 
     fn bin_eq(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("EQ");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l == r)),
             _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
@@ -106,6 +138,7 @@ impl State {
     }
 
     fn bin_add(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("ADD");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_add(r))),
             _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
@@ -113,6 +146,7 @@ impl State {
     }
 
     fn bin_sub(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("SUB");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_sub(r))),
             _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
@@ -120,6 +154,7 @@ impl State {
     }
 
     fn bin_mul(&mut self, l: Value, r: Value) -> VMResult<Value> {
+        dumpop!("MUL");
         match (l, r) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_mul(r))),
             _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
@@ -144,6 +179,7 @@ impl State {
     }
 
     fn op_drop(&mut self) -> VMResult<bool> {
+        dumpop!("DROP");
         self.drop()?; // Do main stuff.
         self.pc += 1; // Skip one byte, Size of opcode = one byte.
         Ok(true)
@@ -159,18 +195,35 @@ impl State {
     }
 
     fn op_int1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        self.push(Value::Integer(self.fetch(opcodes, 1)? as i64))?;
+        let val = self.fetch(opcodes, 1)?;
+        dumpop!("INT {val}");
+        self.push(Value::Integer(val as i64))?;
         self.pc += 2;
         Ok(true)
     }
 
     fn op_ptr(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        self.push(Value::Address(u32::from_be_bytes([
+        let address = u32::from_be_bytes([
             self.fetch(opcodes, 1)?,
             self.fetch(opcodes, 2)?,
             self.fetch(opcodes, 3)?,
             self.fetch(opcodes, 4)?,
-        ])))?;
+        ]);
+        dumpop!("PTR {address}");
+        self.push(Value::Address(address))?;
+        self.pc += 5;
+        Ok(true)
+    }
+
+    fn op_stack(&mut self, opcodes: &[u8]) -> VMResult<bool> {
+        let count = u32::from_be_bytes([
+            self.fetch(opcodes, 1)?,
+            self.fetch(opcodes, 2)?,
+            self.fetch(opcodes, 3)?,
+            self.fetch(opcodes, 4)?,
+        ]);
+        dumpop!("STACK {count}");
+        self.sp += count;
         self.pc += 5;
         Ok(true)
     }
@@ -186,8 +239,15 @@ impl State {
                         self.fetch(opcodes, 3)?,
                         self.fetch(opcodes, 4)?,
                     ]);
+                    dumpop!("JPF {}", self.pc);
                     Ok(true)
                 } else {
+                    dumpop!("JPF {}", u32::from_be_bytes([
+                        self.fetch(opcodes, 1)?,
+                        self.fetch(opcodes, 2)?,
+                        self.fetch(opcodes, 3)?,
+                        self.fetch(opcodes, 4)?,
+                    ]));
                     self.pc += 5;
                     Ok(true)
                 }
@@ -203,11 +263,13 @@ impl State {
             self.fetch(opcodes, 3)?,
             self.fetch(opcodes, 4)?,
         ]);
+        dumpop!("JP {}", self.pc);
         Ok(true)
     }
 
     fn op_call(&mut self, opcodes: &[u8]) -> VMResult<bool> {
         let params_count = self.fetch(opcodes, 1)?;
+        dumpop!("CALL {params_count}");
         if self.sp < params_count as u32 + 1 {
             return Err(VMError::StackUnderflow);
         }
@@ -228,6 +290,7 @@ impl State {
     }
 
     fn op_ret(&mut self) -> VMResult<bool> {
+        dumpop!("RET");
         if self.cp == 0 {
             return Ok(false);
         }
@@ -246,6 +309,7 @@ impl State {
 
     fn op_ld1(&mut self, opcodes: &[u8]) -> VMResult<bool> {
         let index = self.fetch(opcodes, 1)?;
+        dumpop!("LD {index}");
         if self.locals + index as u32 >= self.stack.len() as u32 {
             panic!("Stack overflow");
         }
@@ -269,6 +333,7 @@ impl State {
             let_opcodes::MUL => self.op_binary(Self::bin_mul),
             let_opcodes::INT1 => self.op_int1(opcodes),
             let_opcodes::PTR => self.op_ptr(opcodes),
+            let_opcodes::STACK => self.op_stack(opcodes),
             let_opcodes::JPF => self.op_jpf(opcodes),
             let_opcodes::JP => self.op_jp(opcodes),
             let_opcodes::CALL => self.op_call(opcodes),
@@ -278,8 +343,32 @@ impl State {
         }
     }
 
+    fn dump_stack(&self) {
+        if self.cp == 0 {
+            print!("[]");
+        }
+        for i in 0..self.cp {
+            print!("[ {}, {} ] ", self.calls[i as usize].0, self.calls[i as usize].1);
+        }
+        println!();
+        if self.sp == 0 {
+            print!("[]");
+        }
+        for i in 0..self.sp {
+            print!("[ {} ] ", self.stack[i as usize]);
+        }
+        println!();
+    }
+
     fn run(&mut self, opcodes: &[u8]) -> VMResult<Value> {
-        while self.step(opcodes)? {}
+        if DUMP_STACK {
+            println!("[ PC, LOCALS ]");
+        }
+        while self.step(opcodes)? {
+            if DUMP_STACK {
+                self.dump_stack();
+            }
+        }
         self.pop()
     }
 }
@@ -306,10 +395,18 @@ where
         panic!();
     }
 
-    let result = state.run(&module.opcodes).unwrap();
-
-    println!("{:?}", result);
-    Ok(())
+    match state.run(&module.opcodes) {
+        Ok(result) => {
+            println!("{}", result);
+            Ok(())
+        },
+        Err(error) => match error {
+            VMError::StackUnderflow => let_result::raise!("Stack underflow."),
+            VMError::StackOverflow => let_result::raise!("Stack overflow."),
+            VMError::FetchOpcodeError => let_result::raise!("Fetch opcode error."),
+            VMError::Custom => let_result::raise!("{}", state.message.unwrap()),
+        },
+    }
 }
 
 fn run_file(path: &str) -> let_result::Result {

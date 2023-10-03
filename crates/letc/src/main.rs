@@ -28,22 +28,14 @@ where
     Ok(())
 }
 
-fn compile(input_path: &str, output_path: &str, compile_assembly: bool) -> let_result::Result {
+fn compile(input_path: &str, output_path: &str) -> let_result::Result {
     let start = std::time::Instant::now();
     match std::fs::File::open(input_path) {
         Ok(file) => {
-            if compile_assembly {
-                parse(
-                    input_path,
-                    file,
-                    &mut let_assembly_emitter::open(output_path)?,
-                )?;
-            } else {
-                let mut emitter = let_object_emitter::ObjectEmitter::new();
-                parse(input_path, file, &mut emitter)?;
-                let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap().as_bytes();
-                emitter.finish(output_path, module_name)?;
-            }
+            let mut emitter = let_object_emitter::ObjectEmitter::new();
+            parse(input_path, file, &mut emitter)?;
+            let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap().as_bytes();
+            emitter.finish(output_path, module_name)?;
             println!(
                 "Compiled \"{input_path}\", time: {} seconds",
                 (std::time::Instant::now() - start).as_secs_f64()
@@ -57,12 +49,9 @@ fn compile(input_path: &str, output_path: &str, compile_assembly: bool) -> let_r
 fn main() -> std::process::ExitCode {
     println!("Let Compiler");
     let mut input_path: Option<String> = None;
-    let mut compile_assembly = false;
     for arg in std::env::args().skip(1) {
-        if arg == "-a" || arg == "--assembly" {
-            compile_assembly = true;
-        } else if let Some(input_path) = input_path.take() {
-            match compile(&input_path, &arg, compile_assembly) {
+        if let Some(input_path) = input_path.take() {
+            match compile(&input_path, &arg) {
                 Ok(_) => (),
                 Err(error) => {
                     eprintln!("{error}");

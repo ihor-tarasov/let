@@ -31,6 +31,7 @@ impl_opcodes!(
     JPF: 0x70
     JP: 0x71
     PTR: 0x72
+    STACK: 0x73
 
     // 0x90..=0xFF 9 byte opcodes
     INT8: 0x90
