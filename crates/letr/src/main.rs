@@ -226,19 +226,6 @@ impl State {
         Ok(true)
     }
 
-    fn op_stack(&mut self, opcodes: &[u8]) -> VMResult<bool> {
-        let count = u32::from_be_bytes([
-            self.fetch(opcodes, 1)?,
-            self.fetch(opcodes, 2)?,
-            self.fetch(opcodes, 3)?,
-            self.fetch(opcodes, 4)?,
-        ]);
-        dumpop!("STACK {count}");
-        self.sp += count;
-        self.pc += 5;
-        Ok(true)
-    }
-
     fn op_jpf(&mut self, opcodes: &[u8]) -> VMResult<bool> {
         let value = self.pop()?;
         match value {
@@ -295,6 +282,17 @@ impl State {
             _ => return self.error(format!("Expected address, found {address:?}")),
         }
         self.locals = self.sp - params_count as u32;
+        let params_count_for_check = self.fetch(opcodes, 0)?;
+        if params_count != params_count_for_check {
+            return self.error(format!("Different parameters count."));
+        }
+        self.sp += u32::from_be_bytes([
+            self.fetch(opcodes, 1)?,
+            self.fetch(opcodes, 2)?,
+            self.fetch(opcodes, 3)?,
+            self.fetch(opcodes, 4)?,
+        ]);
+        self.pc += 5;
         Ok(true)
     }
 
@@ -354,7 +352,6 @@ impl State {
             let_opcodes::MUL => self.op_binary(Self::bin_mul),
             let_opcodes::INT1 => self.op_int1(opcodes),
             let_opcodes::PTR => self.op_ptr(opcodes),
-            let_opcodes::STACK => self.op_stack(opcodes),
             let_opcodes::JPF => self.op_jpf(opcodes),
             let_opcodes::JP => self.op_jp(opcodes),
             let_opcodes::CALL => self.op_call(opcodes),

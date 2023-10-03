@@ -15,7 +15,10 @@ pub trait Emitter {
     fn jump_name(&mut self, name: &[u8]) -> let_result::Result;
     fn jump_false(&mut self, id: u32) -> let_result::Result;
     fn jump_false_name(&mut self, name: &[u8]) -> let_result::Result;
-    fn stack(&mut self) -> let_result::Result<u32>;
+
+    // Returns pointer to stack size.
+    fn function(&mut self, args_count: u8) -> let_result::Result<u32>;
+    
     fn set(&mut self, address: u32, value: u8);
     fn store(&mut self, local_id: u32);
 }

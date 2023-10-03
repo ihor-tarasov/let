@@ -33,7 +33,7 @@ impl_opcodes!(
     JPF: 0x70
     JP: 0x71
     PTR: 0x72
-    STACK: 0x73
+    // STACK: 0x73
     LD4: 0x74
     ST4: 0x75
 

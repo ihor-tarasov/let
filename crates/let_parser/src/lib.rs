@@ -375,14 +375,12 @@ where
         }
 
         self.emitter.label_named(self.lexer.buffer())?;
-        self.next();
-
-        let stack_size_address = self.emitter.stack()?;
+        self.next(); // Skip function name.
 
         if !self.token_is_buf(token::Token::Operator, &[b'(']) {
             return let_result::raise!("Expected '('.");
         }
-        self.next();
+        self.next(); // Skip '('.
 
         self.functions.push(Function::new());
 
@@ -399,11 +397,12 @@ where
         if !self.token_is_buf(token::Token::Operator, &[b')']) {
             return let_result::raise!("Expected ')'.");
         }
+        self.next(); // Skip ')'.
 
-        self.next();
+        let stack_size_address = self.emitter.function(args_count as u8)?;
 
         self.block(&[b"end"])?;
-        self.next();
+        self.next(); // Skip "end".
 
         self.emitter.ret()?;
 

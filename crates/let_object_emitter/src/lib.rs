@@ -163,9 +163,16 @@ impl let_emitter::Emitter for ObjectEmitter {
         Ok(())
     }
 
-    fn stack(&mut self) -> let_result::Result<u32> {
+    /*
+    
+    function_name:
+        DB 3  ; Arguments count
+        DD 23 ; Stack size
+        ... ; Other opcodes
+     */
+    fn function(&mut self, args_count: u8) -> let_result::Result<u32> {
         let address = self.opcodes.len() + 1;
-        self.opcodes.extend(&[let_opcodes::STACK, 0, 0, 0, 0]);
+        self.opcodes.extend(&[args_count, 0, 0, 0, 0]);
         Ok(address as u32)
     }
 
