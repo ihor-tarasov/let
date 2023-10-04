@@ -7,3 +7,4 @@ edition = "2021"
 let_result = { version = "0.1.0", path = "../let_result" }
 let_opcodes = { version = "0.1.0", path = "../let_opcodes" }
 let_module = { version = "0.1.0", path = "../let_module" }
+let_vm = { version = "0.1.0", path = "../let_vm" }
