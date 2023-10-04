@@ -53,6 +53,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "leti"
+version = "0.1.0"
+dependencies = [
+ "let_emitter",
+ "let_module",
+ "let_parser",
+ "let_result",
+ "let_vm",
+ "read_iter",
+]
+
+[[package]]
 name = "letl"
 version = "0.1.0"
 dependencies = [

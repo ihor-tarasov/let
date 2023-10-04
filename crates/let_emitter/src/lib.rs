@@ -184,7 +184,10 @@ impl Emitter {
         self.opcodes.push(let_opcodes::LIST);
     }
 
-    pub fn finish(mut self, path: &str, module_name: &[u8]) -> let_result::Result {
+    pub fn finish_to_write<W>(mut self, write: &mut W, module_name: &[u8]) -> let_result::Result
+    where
+        W: std::io::Write,
+    {
         self.indexed_links
             .resolve(&self.indexed_labels, &mut self.opcodes)?;
         self.named_links
@@ -196,8 +199,14 @@ impl Emitter {
             links: self.named_links,
         };
 
+        module.write_prefixed(module_name, write)?;
+
+        Ok(())
+    }
+
+    pub fn finish(self, path: &str, module_name: &[u8]) -> let_result::Result {
         match std::fs::File::create(path) {
-            Ok(mut file) => module.write_prefixed(module_name, &mut file)?,
+            Ok(mut file) => self.finish_to_write(&mut file, module_name)?,
             Err(error) => {
                 return let_result::raise!("Unable to create file {:?}, error: {error}.", path)
             }
