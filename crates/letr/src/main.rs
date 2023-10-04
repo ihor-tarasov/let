@@ -1,5 +1,5 @@
 use core::fmt;
-use std::fs::File;
+use std::{cell::RefCell, fs::File, rc::Rc};
 
 const DUMP_OPCODE: bool = true;
 const DUMP_STACK: bool = true;
@@ -34,13 +34,14 @@ fn fetch_u32(opcodes: &[u8], offset: u32) -> VMResult<u32> {
     ]))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 enum Value {
     Void,
     Boolean(bool),
     Integer(i64),
     Address(u32),
     CallState(u32, u32),
+    Object(Rc<RefCell<Object>>),
 }
 
 impl fmt::Display for Value {
@@ -51,6 +52,37 @@ impl fmt::Display for Value {
             Value::Integer(value) => write!(f, "{value}"),
             Value::Address(value) => write!(f, "{value}"),
             Value::CallState(pc, locals) => write!(f, "(PC:{pc} LC:{locals})"),
+            Value::Object(object) => write!(f, "{}", object.borrow()),
+        }
+    }
+}
+
+enum Object {
+    List(Vec<Value>),
+}
+
+impl Object {
+    fn push(&mut self, value: Value) {
+        match self {
+            Object::List(list) => list.push(value),
+        }
+    }
+}
+
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::List(list) => {
+                write!(f, "[")?;
+                let mut iter = list.iter();
+                if let Some(value) = iter.next() {
+                    write!(f, "{value}")?;
+                    for value in iter {
+                        write!(f, ", {value}")?;
+                    }
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -106,7 +138,7 @@ impl State {
             Err(VMError::StackOverflow)
         } else {
             self.sp -= 1;
-            Ok(self.stack[self.sp as usize])
+            Ok(self.stack[self.sp as usize].clone())
         }
     }
 
@@ -117,7 +149,7 @@ impl State {
         } else if self.sp >= self.stack.len() as u32 {
             Err(VMError::StackOverflow)
         } else {
-            Ok(self.stack[(self.sp - 1) as usize])
+            Ok(self.stack[(self.sp - 1) as usize].clone())
         }
     }
 
@@ -128,57 +160,64 @@ impl State {
 
     fn bin_ls(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("LS");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l < r)),
-            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+            _ => self.error(format!("Unable to compare {l} and {r} values.")),
         }
     }
 
     fn bin_le(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("LE");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l <= r)),
-            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+            _ => self.error(format!("Unable to compare {l} and {r} values.")),
         }
     }
 
     fn bin_gr(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("GR");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l > r)),
-            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+            _ => self.error(format!("Unable to compare {l} and {r} values.")),
         }
     }
 
     fn bin_eq(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("EQ");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Boolean(l == r)),
-            _ => self.error(format!("Unable to compare {l:?} and {r:?} values.")),
+            _ => self.error(format!("Unable to compare {l} and {r} values.")),
         }
     }
 
     fn bin_add(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("ADD");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_add(r))),
-            _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
+            (Value::Object(object), value) => {
+                {
+                    let mut object = object.borrow_mut();
+                    object.push(value);
+                }
+                Ok(Value::Object(object))
+            }
+            _ => self.error(format!("Unable to addict {l} and {r} values.")),
         }
     }
 
     fn bin_sub(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("SUB");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_sub(r))),
-            _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
+            _ => self.error(format!("Unable to addict {l} and {r} values.")),
         }
     }
 
     fn bin_mul(&mut self, l: Value, r: Value) -> VMResult<Value> {
         dumpop!("MUL");
-        match (l, r) {
+        match (l.clone(), r.clone()) {
             (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_mul(r))),
-            _ => self.error(format!("Unable to addict {l:?} and {r:?} values.")),
+            _ => self.error(format!("Unable to addict {l} and {r} values.")),
         }
     }
 
@@ -193,8 +232,8 @@ impl State {
         self.sp -= 1;
         self.stack[(self.sp - 1) as usize] = f(
             self,
-            self.stack[(self.sp - 1) as usize],
-            self.stack[(self.sp) as usize],
+            self.stack[(self.sp - 1) as usize].clone(),
+            self.stack[(self.sp) as usize].clone(),
         )?;
         Ok(())
     }
@@ -218,6 +257,15 @@ impl State {
     fn op_void(&mut self) -> VMResult<bool> {
         dumpop!("VOID");
         self.push(Value::Void)?;
+        self.pc += 1;
+        Ok(true)
+    }
+
+    fn op_list(&mut self) -> VMResult<bool> {
+        dumpop!("LIST");
+        self.push(Value::Object(Rc::new(RefCell::new(Object::List(
+            Vec::new(),
+        )))))?;
         self.pc += 1;
         Ok(true)
     }
@@ -247,15 +295,12 @@ impl State {
                     dumpop!("JPF {}", self.pc);
                     Ok(true)
                 } else {
-                    dumpop!(
-                        "JPF {}",
-                        fetch_u32(opcodes, self.pc + 1)?,
-                    );
+                    dumpop!("JPF {}", fetch_u32(opcodes, self.pc + 1)?,);
                     self.pc += 5;
                     Ok(true)
                 }
             }
-            _ => self.error(format!("Expected bool value, found {value:?}.")),
+            _ => self.error(format!("Expected bool value, found {value}.")),
         }
     }
 
@@ -272,16 +317,18 @@ impl State {
             return Err(VMError::StackUnderflow);
         }
         let in_stack_offset = self.sp - params_count as u32 - 1;
-        let address = self.stack[in_stack_offset as usize];
+        let address = self.stack[in_stack_offset as usize].clone();
         self.stack[in_stack_offset as usize] = Value::CallState(self.pc + 2, self.locals);
         match address {
             Value::Address(address) => self.pc = address,
-            _ => return self.error(format!("Expected address, found {address:?}")),
+            _ => return self.error(format!("Expected address, found {address}")),
         }
         self.locals = self.sp - params_count as u32;
         let params_count_for_check = fetch_u8(opcodes, self.pc)?;
         if params_count != params_count_for_check {
-            return self.error(format!("Expected {params_count_for_check} function call arguments, found {params_count}."));
+            return self.error(format!(
+                "Expected {params_count_for_check} function call arguments, found {params_count}."
+            ));
         }
         let stack_size = fetch_u32(opcodes, self.pc + 1)?;
         self.sp += stack_size;
@@ -297,14 +344,14 @@ impl State {
         }
         let result = self.pop()?;
         self.sp = self.locals - 1;
-        let call_state = self.stack[self.sp as usize];
+        let call_state = self.stack[self.sp as usize].clone();
         match call_state {
             Value::CallState(new_pc, new_locals) => {
                 self.push(result)?;
                 self.pc = new_pc;
                 self.locals = new_locals;
             }
-            _ => return self.error(format!("Expected CallState, found {call_state:?}")),
+            _ => return self.error(format!("Expected CallState, found {call_state}")),
         }
         Ok(true)
     }
@@ -315,7 +362,7 @@ impl State {
         if self.locals + index as u32 >= self.stack.len() as u32 {
             panic!("Stack overflow");
         }
-        self.push(self.stack[(self.locals + index as u32) as usize])?;
+        self.push(self.stack[(self.locals + index as u32) as usize].clone())?;
         self.pc += 2;
         Ok(true)
     }
@@ -345,6 +392,7 @@ impl State {
             let_opcodes::SUB => self.op_binary(Self::bin_sub),
             let_opcodes::MUL => self.op_binary(Self::bin_mul),
             let_opcodes::VOID => self.op_void(),
+            let_opcodes::LIST => self.op_list(),
             let_opcodes::INT1 => self.op_int1(opcodes),
             let_opcodes::PTR => self.op_ptr(opcodes),
             let_opcodes::JPF => self.op_jpf(opcodes),
@@ -386,7 +434,7 @@ where
 
     let mut state = State {
         pc: 0,
-        stack: [Value::Void; STACK_SIZE],
+        stack: std::array::from_fn(|_| Value::Void),
         sp: 0,
         locals: 0,
         message: None,

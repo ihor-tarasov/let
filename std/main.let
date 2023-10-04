@@ -1,11 +1,12 @@
 
 fn main()
+    let a = []
     let i = 0
-    while i < 7
-        let result = utils.factorial(i)
+    while i < 8
+        a + utils.factorial(i)
         i = i + 1
-        result
     end
+    a
 end
 
 main()

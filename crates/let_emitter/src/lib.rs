@@ -24,4 +24,5 @@ pub trait Emitter {
     fn offset(&self) -> u32;
     fn jump_to(&mut self, address: u32);
     fn void(&mut self);
+    fn list(&mut self);
 }

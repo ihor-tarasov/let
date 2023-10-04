@@ -9,6 +9,7 @@ impl_opcodes!(
     RET: 0x00
     DROP: 0x01
     VOID: 0x02
+    LIST: 0x03
 
     // Operators opcodes is in range 0x10..=0x1F
     LS: 0x10

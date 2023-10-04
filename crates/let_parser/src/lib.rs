@@ -239,6 +239,7 @@ where
             (Some(token::Token::Integer), _) => self.integer(),
             (Some(token::Token::Real), _) => self.real(),
             (Some(token::Token::Operator), b"(") => self.paren(),
+            (Some(token::Token::Operator), b"[") => self.list(),
             _ => let_result::raise!("Unknown token."),
         }
     }
@@ -314,6 +315,25 @@ where
 
     fn add_local(&mut self) -> u32 {
         self.functions.last_mut().unwrap().var(self.lexer.buffer())
+    }
+
+    fn list(&mut self) -> let_result::Result {
+        self.next(); // Skip '['.
+
+        self.emitter.list();
+
+        loop {
+            if self.token_is_buf(token::Token::Operator, b"]") {
+                break;
+            }
+
+            self.expression()?;
+            self.emitter.binary([b'+', b' ', b' '])?;
+        }
+
+        self.next(); // Skip ']'.
+
+        Ok(())
     }
 
     fn p_let(&mut self) -> let_result::Result {

@@ -204,4 +204,8 @@ impl let_emitter::Emitter for ObjectEmitter {
     fn void(&mut self) {
         self.opcodes.push(let_opcodes::VOID);
     }
+
+    fn list(&mut self) {
+        self.opcodes.push(let_opcodes::LIST);
+    }
 }
