@@ -4,10 +4,9 @@ use std::path::Path;
 
 mod line;
 
-fn parse<R, E>(path: &str, file: R, emitter: &mut E) -> let_result::Result
+fn parse<R>(path: &str, file: R, emitter: &mut let_emitter::Emitter) -> let_result::Result
 where
     R: std::io::Read + std::io::Seek,
-    E: let_emitter::Emitter,
 {
     let mut iter = read_iter::ReadIter::new(file, 1024);
     let mut parser = let_parser::Parser::new(&mut iter, emitter);
@@ -32,7 +31,7 @@ fn compile(input_path: &str, output_path: &str) -> let_result::Result {
     let start = std::time::Instant::now();
     match std::fs::File::open(input_path) {
         Ok(file) => {
-            let mut emitter = let_object_emitter::ObjectEmitter::new();
+            let mut emitter = let_emitter::Emitter::new();
             parse(input_path, file, &mut emitter)?;
             let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap().as_bytes();
             emitter.finish(output_path, module_name)?;

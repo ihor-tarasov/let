@@ -84,21 +84,20 @@ impl Function {
     }
 }
 
-pub struct Parser<'a, I: Iterator, E> {
+pub struct Parser<'a, I: Iterator> {
     lexer: lexer::Lexer<I>,
     token: Option<token::Token>,
     range: Range<usize>,
-    emitter: &'a mut E,
+    emitter: &'a mut let_emitter::Emitter,
     lable_id: usize,
     functions: Vec<Function>,
 }
 
-impl<'a, I, E> Parser<'a, I, E>
+impl<'a, I> Parser<'a, I>
 where
     I: Iterator<Item = u8>,
-    E: let_emitter::Emitter,
 {
-    pub fn new(iter: I, emitter: &'a mut E) -> Self {
+    pub fn new(iter: I, emitter: &'a mut let_emitter::Emitter) -> Self {
         Self {
             lexer: iter.into(),
             token: None,
