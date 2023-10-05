@@ -193,6 +193,10 @@ impl IndexedLabels {
             Ok(())
         }
     }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
 }
 
 pub struct IndexedLinks(HashMap<u32, Vec<u32>>);
@@ -211,7 +215,11 @@ impl IndexedLinks {
     }
 
     pub fn resolve(&mut self, labels: &IndexedLabels, opcodes: &mut [u8]) -> let_result::Result {
-        resolve(&mut self.0, &labels.0, opcodes)
+        resolve(&mut self.0, &labels.0, opcodes)?;
+        if !self.0.is_empty() {
+            panic!("Indexed links must be empty after resolve.")
+        }
+        Ok(())
     }
 }
 

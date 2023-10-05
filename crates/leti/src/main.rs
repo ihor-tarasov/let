@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::fmt::Write;
 use std::io::Seek;
 use std::path::Path;
@@ -34,14 +33,11 @@ where
     Ok(())
 }
 
-fn compile(input_path: &str) -> let_result::Result<let_module::Module> {
+fn compile(input_path: &str, emitter: &mut let_emitter::Emitter) -> let_result::Result {
     match std::fs::File::open(input_path) {
         Ok(file) => {
-            let mut emitter = let_emitter::Emitter::new();
-            parse(input_path, file, &mut emitter)?;
-            let mut data = VecDeque::new();
-            emitter.finish_to_write(&mut data)?;
-            let_module::Module::read(data)
+            parse(input_path, file, emitter)?;
+            emitter.resolve()
         }
         Err(error) => let_result::raise!("Unable to open file \"{input_path}\", error: {error}"),
     }
@@ -49,16 +45,10 @@ fn compile(input_path: &str) -> let_result::Result<let_module::Module> {
 
 fn main() -> std::process::ExitCode {
     println!("Let Compiler");
-    let mut module: Option<let_module::Module> = None;
+    let mut emitter = let_emitter::Emitter::new();
     for arg in std::env::args().skip(1) {
-        match compile(&arg) {
-            Ok(result) => {
-                if let Some(module) = &mut module {
-                    module.merge(result).unwrap();
-                } else {
-                    module = Some(result)
-                }
-            }
+        match compile(&arg, &mut emitter) {
+            Ok(_) => (),
             Err(error) => {
                 eprintln!("{error}");
                 return std::process::ExitCode::FAILURE;
@@ -68,13 +58,15 @@ fn main() -> std::process::ExitCode {
 
     let mut state = let_vm::State::new();
 
-    if let Some(pc) = module.as_ref().unwrap().labels.get(b"main") {
+    let module = emitter.into_module();
+
+    if let Some(pc) = module.labels.get(b"main") {
         state.set_pc(pc);
     } else {
         panic!("Unable to find 'main' module")
     }
 
-    match state.run(&module.unwrap().opcodes) {
+    match state.run(&module.opcodes) {
         Ok(result) => {
             println!("{}", result);
         }

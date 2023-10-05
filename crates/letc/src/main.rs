@@ -34,6 +34,7 @@ fn compile(input_path: &str, output_path: &str) -> let_result::Result {
         Ok(file) => {
             let mut emitter = let_emitter::Emitter::new();
             parse(input_path, file, &mut emitter)?;
+            emitter.resolve()?;
             emitter.finish(output_path)?;
             println!(
                 "Compiled \"{input_path}\", time: {} seconds",
