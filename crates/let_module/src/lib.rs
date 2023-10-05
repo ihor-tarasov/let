@@ -57,11 +57,11 @@ impl NamedLabels {
         Self(HashMap::new())
     }
 
-    pub fn push(&mut self, name: &[u8], address: u32) -> let_result::Result {
-        if self.0.contains_key(name) {
-            let_result::raise!("Label \"{}\" already exists.", U8Str(name))
+    pub fn push(&mut self, name: Box<[u8]>, address: u32) -> let_result::Result {
+        if self.0.contains_key(&name) {
+            let_result::raise!("Label \"{}\" already exists.", U8Str(&name))
         } else {
-            self.0.insert(Vec::from(name).into_boxed_slice(), address);
+            self.0.insert(name, address);
             Ok(())
         }
     }
@@ -74,23 +74,6 @@ impl NamedLabels {
         utils::write_u32(write, self.0.len() as u32)?;
         for (k, v) in self.0.iter() {
             utils::write_label(write, k)?;
-            utils::write_u32(write, *v)?;
-        }
-        Ok(())
-    }
-
-    pub fn write_prefixed<W>(&self, prefix: &[u8], write: &mut W) -> let_result::Result
-    where
-        W: Write,
-    {
-        debug_assert!(self.0.len() <= u32::MAX as usize);
-        utils::write_u32(write, self.0.len() as u32)?;
-        for (name, v) in self.0.iter() {
-            if name.as_ref() == b"__ctor__" {
-                utils::write_label(write, prefix)?;
-            } else {
-                utils::write_labels(write, prefix, name)?;
-            }
             utils::write_u32(write, *v)?;
         }
         Ok(())
@@ -250,17 +233,6 @@ impl Module {
         write.write_all(&[b'L', b'E', b'T', 38])?;
         utils::write_u8_slice(&mut write, &self.opcodes)?;
         self.labels.write(&mut write)?;
-        self.links.write(&mut write)?;
-        Ok(())
-    }
-
-    pub fn write_prefixed<W>(&self, prefix: &[u8], mut write: W) -> let_result::Result
-    where
-        W: std::io::Write,
-    {
-        write.write_all(&[b'L', b'E', b'T', 38])?;
-        utils::write_u8_slice(&mut write, &self.opcodes)?;
-        self.labels.write_prefixed(prefix, &mut write)?;
         self.links.write(&mut write)?;
         Ok(())
     }

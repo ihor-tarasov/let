@@ -91,13 +91,14 @@ pub struct Parser<'a, I: Iterator> {
     emitter: &'a mut let_emitter::Emitter,
     lable_id: usize,
     functions: Vec<Function>,
+    module: &'a [u8],
 }
 
 impl<'a, I> Parser<'a, I>
 where
     I: Iterator<Item = u8>,
 {
-    pub fn new(iter: I, emitter: &'a mut let_emitter::Emitter) -> Self {
+    pub fn new(iter: I, module: &'a [u8], emitter: &'a mut let_emitter::Emitter) -> Self {
         Self {
             lexer: iter.into(),
             token: None,
@@ -105,6 +106,7 @@ where
             emitter,
             lable_id: 0,
             functions: vec![Function::new()],
+            module,
         }
     }
 
@@ -216,7 +218,7 @@ where
                 _ => {
                     self.emitter.load(index);
                     Ok(())
-                },
+                }
             }
         } else {
             self.emitter.pointer(self.lexer.buffer())?;
@@ -438,7 +440,11 @@ where
             return let_result::raise!("Expected function name.");
         }
 
-        self.emitter.label_named(self.lexer.buffer())?;
+        let mut full_name = Vec::with_capacity(self.module.len() + self.lexer.buffer().len() + 1);
+        full_name.extend(self.module);
+        full_name.push(b'.');
+        full_name.extend(self.lexer.buffer());
+        self.emitter.label_named(full_name.into_boxed_slice())?;
         self.next(); // Skip function name.
 
         if !self.token_is_buf(token::Token::Operator, &[b'(']) {
@@ -483,7 +489,7 @@ where
     }
 
     fn global_code(&mut self) -> let_result::Result {
-        self.emitter.label_named(b"__ctor__")?;
+        self.emitter.label_named(Vec::from(self.module).into_boxed_slice())?;
         self.expression()?;
         self.emitter.ret()
     }

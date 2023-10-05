@@ -15,19 +15,6 @@ pub fn write_label<W: std::io::Write>(write: &mut W, data: &[u8]) -> let_result:
     Ok(())
 }
 
-pub fn write_labels<W: std::io::Write>(
-    write: &mut W,
-    first: &[u8],
-    second: &[u8],
-) -> let_result::Result {
-    debug_assert!(first.len() + second.len() + 1 <= u8::MAX as usize);
-    write_u8(write, (first.len() + second.len() + 1) as u8)?;
-    write.write_all(&first)?;
-    write_u8(write, b'.')?;
-    write.write_all(&second)?;
-    Ok(())
-}
-
 pub fn write_u8_slice<W: std::io::Write>(write: &mut W, data: &[u8]) -> let_result::Result {
     debug_assert!(data.len() <= u32::MAX as usize);
     write_u32(write, data.len() as u32)?;

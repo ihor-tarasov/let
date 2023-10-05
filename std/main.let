@@ -9,4 +9,4 @@ fn main()
     a
 end
 
-main()
+main.main()

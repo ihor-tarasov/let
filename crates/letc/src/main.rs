@@ -9,7 +9,8 @@ where
     R: std::io::Read + std::io::Seek,
 {
     let mut iter = read_iter::ReadIter::new(file, 1024);
-    let mut parser = let_parser::Parser::new(&mut iter, emitter);
+    let module_name = Path::new(path).file_stem().unwrap().to_str().unwrap().as_bytes();
+    let mut parser = let_parser::Parser::new(&mut iter, module_name, emitter);
     if let Err(error) = parser.parse() {
         let range = parser.range();
         iter.seek(std::io::SeekFrom::Start(0))?;
@@ -33,8 +34,7 @@ fn compile(input_path: &str, output_path: &str) -> let_result::Result {
         Ok(file) => {
             let mut emitter = let_emitter::Emitter::new();
             parse(input_path, file, &mut emitter)?;
-            let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap().as_bytes();
-            emitter.finish(output_path, module_name)?;
+            emitter.finish(output_path)?;
             println!(
                 "Compiled \"{input_path}\", time: {} seconds",
                 (std::time::Instant::now() - start).as_secs_f64()

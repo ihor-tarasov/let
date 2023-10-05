@@ -81,7 +81,7 @@ impl Emitter {
         Ok(())
     }
 
-    pub fn label_named(&mut self, name: &[u8]) -> let_result::Result {
+    pub fn label_named(&mut self, name: Box<[u8]>) -> let_result::Result {
         self.named_labels.push(name, self.opcodes.len() as u32)?;
         Ok(())
     }
@@ -93,23 +93,9 @@ impl Emitter {
         Ok(())
     }
 
-    pub fn jump_name(&mut self, name: &[u8]) -> let_result::Result {
-        self.opcodes.extend(&[let_opcodes::JP]);
-        self.named_links.push(name, self.opcodes.len() as u32);
-        self.opcodes.extend(&[0, 0, 0, 0]);
-        Ok(())
-    }
-
     pub fn jump_false(&mut self, id: u32) -> let_result::Result {
         self.opcodes.extend(&[let_opcodes::JPF]);
         self.indexed_links.push(id, self.opcodes.len() as u32);
-        self.opcodes.extend(&[0, 0, 0, 0]);
-        Ok(())
-    }
-
-    pub fn jump_false_name(&mut self, name: &[u8]) -> let_result::Result {
-        self.opcodes.extend(&[let_opcodes::JPF]);
-        self.named_links.push(name, self.opcodes.len() as u32);
         self.opcodes.extend(&[0, 0, 0, 0]);
         Ok(())
     }
@@ -184,7 +170,7 @@ impl Emitter {
         self.opcodes.push(let_opcodes::LIST);
     }
 
-    pub fn finish_to_write<W>(mut self, write: &mut W, module_name: &[u8]) -> let_result::Result
+    pub fn finish_to_write<W>(mut self, write: &mut W) -> let_result::Result
     where
         W: std::io::Write,
     {
@@ -199,14 +185,14 @@ impl Emitter {
             links: self.named_links,
         };
 
-        module.write_prefixed(module_name, write)?;
+        module.write(write)?;
 
         Ok(())
     }
 
-    pub fn finish(self, path: &str, module_name: &[u8]) -> let_result::Result {
+    pub fn finish(self, path: &str) -> let_result::Result {
         match std::fs::File::create(path) {
-            Ok(mut file) => self.finish_to_write(&mut file, module_name)?,
+            Ok(mut file) => self.finish_to_write(&mut file)?,
             Err(error) => {
                 return let_result::raise!("Unable to create file {:?}, error: {error}.", path)
             }
