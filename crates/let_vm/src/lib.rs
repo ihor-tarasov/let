@@ -256,6 +256,65 @@ impl State {
         Ok(())
     }
 
+    fn index_get_list(&mut self, data: &Vec<Value>, key: Value) -> VMResult<Value> {
+        match key {
+            Value::Integer(index) => {
+                if index >= 0 && (index as usize) < data.len() {
+                    Ok(data[index as usize].clone())
+                } else {
+                    self.error(format!("Index out of range."))
+                }
+            }
+            _ => self.error(format!("Can't to index list by {key}.")),
+        }
+    }
+
+    fn index_get_object(&mut self, data: &Object, key: Value) -> VMResult<Value> {
+        match data {
+            Object::List(list) => self.index_get_list(list, key),
+        }
+    }
+
+    fn index_get(&mut self, data: Value, key: Value) -> VMResult<Value> {
+        match data {
+            Value::Object(object) => {
+                let object = object.borrow();
+                self.index_get_object(&object, key)
+            }
+            _ => self.error(format!("Can't to index {data}.")),
+        }
+    }
+
+    fn index_set_list(&mut self, data: &mut Vec<Value>, key: Value, value: Value) -> VMResult {
+        match key {
+            Value::Integer(index) => {
+                if index >= 0 && (index as usize) < data.len() {
+                    data[index as usize] = value;
+                    Ok(())
+                } else {
+                    self.error(format!("Index out of range."))
+                }
+            }
+            _ => self.error(format!("Can't to index list by {key}.")),
+        }
+    }
+
+    fn index_set_object(&mut self, data: &mut Object, key: Value, value: Value) -> VMResult {
+        match data {
+            Object::List(list) => self.index_set_list(list, key, value),
+        }
+    }
+
+    fn index_set(&mut self, data: Value, key: Value, value: Value) -> VMResult {
+        match data {
+            Value::Object(object) => {
+                let mut object = object.borrow_mut();
+                self.index_set_object(&mut object, key, value)
+            }
+            _ => self.error(format!("Can't to index {data}.")),
+        }
+    }
+
     fn op_drop(&mut self) -> VMResult<bool> {
         dumpop!("DROP");
         self.drop()?; // Do main stuff.
@@ -396,6 +455,27 @@ impl State {
         Ok(true)
     }
 
+    fn op_get(&mut self) -> VMResult<bool> {
+        dumpop!("GET");
+        let key = self.pop()?;
+        let data = self.pop()?;
+        let result = self.index_get(data, key)?;
+        self.push(result)?;
+        self.pc += 1;
+        Ok(true)
+    }
+
+    fn op_set(&mut self) -> VMResult<bool> {
+        dumpop!("SET");
+        let value = self.pop()?;
+        let key = self.pop()?;
+        let data = self.pop()?;
+        self.index_set(data, key, value.clone())?;
+        self.push(value)?;
+        self.pc += 1;
+        Ok(true)
+    }
+
     /// Executes one opcode.
     /// Returns Ok(false) if VM is stopped.
     fn step(&mut self, opcodes: &[u8]) -> VMResult<bool> {
@@ -419,6 +499,8 @@ impl State {
             let_opcodes::RET => self.op_ret(),
             let_opcodes::LD1 => self.op_ld1(opcodes),
             let_opcodes::ST1 => self.op_st1(opcodes),
+            let_opcodes::GET => self.op_get(),
+            let_opcodes::SET => self.op_set(),
             _ => self.error(format!("Unknown opcode 0x{opcode:02X}")),
         }
     }

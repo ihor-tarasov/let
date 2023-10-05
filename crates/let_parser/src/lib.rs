@@ -209,12 +209,39 @@ where
         Ok(())
     }
 
+    fn index(&mut self, index: u32) -> let_result::Result {
+        self.next(); // Skip '['.
+
+        self.emitter.load(index);
+        
+        self.expression()?;
+        
+        if !self.token_is_buf(token::Token::Operator, &[b']']) {
+            return let_result::raise!("Expected ']'.");
+        }
+        self.next(); // Skip ']'.
+
+        match (self.token, self.lexer.buffer()) {
+            (Some(token::Token::Operator), b"=") => {
+                self.next(); // Skip '='.
+                self.expression()?;
+                self.emitter.index_set();
+                Ok(())
+            },
+            _ => {
+                self.emitter.index_get();
+                Ok(())
+            }
+        }
+    }
+
     fn identifier(&mut self) -> let_result::Result {
         if let Some(index) = self.find_variable(self.lexer.buffer()) {
             self.next(); // Skip identifier.
 
             match (self.token, self.lexer.buffer()) {
                 (Some(token::Token::Operator), b"=") => self.assign(index),
+                (Some(token::Token::Operator), b"[") => self.index(index),
                 _ => {
                     self.emitter.load(index);
                     Ok(())

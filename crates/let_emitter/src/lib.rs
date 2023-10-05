@@ -170,6 +170,14 @@ impl Emitter {
         self.opcodes.push(let_opcodes::LIST);
     }
 
+    pub fn index_get(&mut self) {
+        self.opcodes.push(let_opcodes::GET);
+    }
+
+    pub fn index_set(&mut self) {
+        self.opcodes.push(let_opcodes::SET);
+    }
+
     pub fn resolve(&mut self) -> let_result::Result {
         self.indexed_links
             .resolve(&self.indexed_labels, &mut self.opcodes)?;

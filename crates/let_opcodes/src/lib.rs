@@ -10,6 +10,8 @@ impl_opcodes!(
     DROP: 0x01
     VOID: 0x02
     LIST: 0x03
+    GET: 0x04 // For indexing
+    SET: 0x05 // For indexing
 
     // Operators opcodes is in range 0x10..=0x1F
     LS: 0x10

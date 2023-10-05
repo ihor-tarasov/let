@@ -6,6 +6,7 @@ fn main()
         a + utils.factorial(i)
         i = i + 1
     end
+    a[3] = 255
     a
 end
 
